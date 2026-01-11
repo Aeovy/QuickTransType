@@ -63,3 +63,7 @@ plist = "1.6"
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"
 objc = "0.2"
+
+# Windows 键盘模拟
+[target.'cfg(target_os = "windows")'.dependencies]
+enigo = "0.6"

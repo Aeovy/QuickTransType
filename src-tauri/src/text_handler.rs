@@ -1,14 +1,23 @@
 //! 文本处理模块
 //! 处理剪贴板操作、键盘模拟和翻译流程
+//! 
+//! 支持平台:
+//! - macOS: 使用 AppleScript (osascript) 模拟键盘操作
+//! - Windows: 使用 enigo 库模拟键盘操作
 
 use crate::error::{AppError, Result};
 use arboard::Clipboard;
-use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
+
+#[cfg(target_os = "macos")]
+use std::process::Command;
+
+#[cfg(target_os = "windows")]
+use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
 /// 文本处理器
 pub struct TextHandler {
@@ -108,7 +117,8 @@ impl TextHandler {
             .map_err(|e| AppError::Clipboard(format!("无法设置剪贴板: {}", e)))
     }
 
-    /// 模拟全选操作 (Cmd+A) - 使用 AppleScript
+    /// 模拟全选操作 (Cmd+A / Ctrl+A)
+    #[cfg(target_os = "macos")]
     pub async fn select_all(&self) -> Result<()> {
         debug!("Simulating Cmd+A via AppleScript");
         
@@ -132,7 +142,33 @@ impl TextHandler {
         Ok(())
     }
 
-    /// 模拟复制操作 (Cmd+C) - 使用 AppleScript
+    /// 模拟全选操作 (Ctrl+A) - Windows
+    #[cfg(target_os = "windows")]
+    pub async fn select_all(&self) -> Result<()> {
+        debug!("Simulating Ctrl+A via enigo");
+        
+        let result = std::thread::spawn(|| -> Result<()> {
+            let mut enigo = Enigo::new(&Settings::default())
+                .map_err(|e| AppError::Keyboard(format!("创建键盘模拟器失败: {}", e)))?;
+            
+            enigo.key(Key::Control, Direction::Press)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            enigo.key(Key::Unicode('a'), Direction::Click)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            enigo.key(Key::Control, Direction::Release)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            
+            Ok(())
+        }).join().map_err(|_| AppError::Keyboard("键盘模拟线程崩溃".to_string()))??;
+
+        sleep(Duration::from_millis(50)).await;
+        Ok(())
+    }
+
+    /// 模拟复制操作 (Cmd+C) - macOS
+    #[cfg(target_os = "macos")]
     pub async fn copy(&self) -> Result<()> {
         debug!("Simulating Cmd+C via AppleScript");
         
@@ -156,7 +192,33 @@ impl TextHandler {
         Ok(())
     }
 
-    /// 模拟粘贴操作 (Cmd+V) - 使用 AppleScript
+    /// 模拟复制操作 (Ctrl+C) - Windows
+    #[cfg(target_os = "windows")]
+    pub async fn copy(&self) -> Result<()> {
+        debug!("Simulating Ctrl+C via enigo");
+        
+        std::thread::spawn(|| -> Result<()> {
+            let mut enigo = Enigo::new(&Settings::default())
+                .map_err(|e| AppError::Keyboard(format!("创建键盘模拟器失败: {}", e)))?;
+            
+            enigo.key(Key::Control, Direction::Press)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            enigo.key(Key::Unicode('c'), Direction::Click)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            enigo.key(Key::Control, Direction::Release)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            
+            Ok(())
+        }).join().map_err(|_| AppError::Keyboard("键盘模拟线程崩溃".to_string()))??;
+
+        sleep(Duration::from_millis(50)).await;
+        Ok(())
+    }
+
+    /// 模拟粘贴操作 (Cmd+V) - macOS
+    #[cfg(target_os = "macos")]
     async fn paste_clipboard(&self) -> Result<()> {
         debug!("Simulating Cmd+V via AppleScript");
         
@@ -175,6 +237,31 @@ impl TextHandler {
                 "键盘模拟失败，请在系统设置 > 隐私与安全性 > 辅助功能中授权本应用".to_string()
             ));
         }
+
+        sleep(Duration::from_millis(50)).await;
+        Ok(())
+    }
+
+    /// 模拟粘贴操作 (Ctrl+V) - Windows
+    #[cfg(target_os = "windows")]
+    async fn paste_clipboard(&self) -> Result<()> {
+        debug!("Simulating Ctrl+V via enigo");
+        
+        std::thread::spawn(|| -> Result<()> {
+            let mut enigo = Enigo::new(&Settings::default())
+                .map_err(|e| AppError::Keyboard(format!("创建键盘模拟器失败: {}", e)))?;
+            
+            enigo.key(Key::Control, Direction::Press)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            enigo.key(Key::Unicode('v'), Direction::Click)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            enigo.key(Key::Control, Direction::Release)
+                .map_err(|e| AppError::Keyboard(format!("按键失败: {}", e)))?;
+            
+            Ok(())
+        }).join().map_err(|_| AppError::Keyboard("键盘模拟线程崩溃".to_string()))??;
 
         sleep(Duration::from_millis(50)).await;
         Ok(())
