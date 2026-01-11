@@ -280,54 +280,72 @@ async fn trigger_translation(app: &tauri::AppHandle, mode: &str) -> Result<(), B
     
     let llm_client = state.get_llm_client().await;
     let target_lang = config.language.current_target.clone();
+    let use_stream = config.llm.stream_mode;
     
-    // 删除选中的文本，准备流式输入
-    state.text_handler.delete_selection().await
-        .map_err(|e| format!("Failed to delete selection: {}", e))?;
-    
-    // 使用流式传输
-    let mut stream = llm_client.translate_stream(&config.llm, &text, &target_lang).await
-        .map_err(|e| format!("Translation API error: {}", e))?;
-    
-    let mut translated_text = String::new();
+    let translated_text: String;
     let mut completion_tokens: Option<u32> = None;
     let mut duration_ms: u64 = 0;
+    let mut tokens_per_second: Option<f64> = None;
     
-    // 处理流式响应
-    use crate::llm::StreamEvent;
-    while let Some(event) = stream.recv().await {
-        match event {
-            StreamEvent::Delta(delta) => {
-                // 流式输入每个增量文本
-                if let Err(e) = state.text_handler.type_chunk(&delta).await {
-                    error!("Failed to type chunk: {}", e);
+    if use_stream {
+        // 流式模式：删除选中的文本，逐字输入
+        state.text_handler.delete_selection().await
+            .map_err(|e| format!("Failed to delete selection: {}", e))?;
+        
+        let mut stream = llm_client.translate_stream(&config.llm, &text, &target_lang).await
+            .map_err(|e| format!("Translation API error: {}", e))?;
+        
+        let mut result_text = String::new();
+        
+        // 处理流式响应
+        use crate::llm::StreamEvent;
+        while let Some(event) = stream.recv().await {
+            match event {
+                StreamEvent::Delta(delta) => {
+                    // 流式输入每个增量文本
+                    if let Err(e) = state.text_handler.type_chunk(&delta).await {
+                        error!("Failed to type chunk: {}", e);
+                    }
+                    result_text.push_str(&delta);
                 }
-                translated_text.push_str(&delta);
-            }
-            StreamEvent::Done { completion_tokens: tokens, duration_ms: dur } => {
-                completion_tokens = tokens;
-                duration_ms = dur;
-                debug!("Stream completed: {} tokens, {}ms", tokens.unwrap_or(0), dur);
-            }
-            StreamEvent::Error(err) => {
-                error!("Stream error: {}", err);
-                // 发生错误时，尝试恢复原文
-                if let Some(backup) = state.text_handler.get_backup().await {
-                    state.text_handler.paste(&backup).await.ok();
+                StreamEvent::Done { completion_tokens: tokens, duration_ms: dur } => {
+                    completion_tokens = tokens;
+                    duration_ms = dur;
+                    debug!("Stream completed: {} tokens, {}ms", tokens.unwrap_or(0), dur);
                 }
-                return Err(err.into());
+                StreamEvent::Error(err) => {
+                    error!("Stream error: {}", err);
+                    // 发生错误时，尝试恢复原文
+                    if let Some(backup) = state.text_handler.get_backup().await {
+                        state.text_handler.paste(&backup).await.ok();
+                    }
+                    return Err(err.into());
+                }
             }
         }
+        
+        translated_text = result_text;
+        tokens_per_second = completion_tokens.map(|t| {
+            if duration_ms > 0 {
+                (t as f64) / (duration_ms as f64 / 1000.0)
+            } else {
+                0.0
+            }
+        });
+    } else {
+        // 非流式模式：等待完成后一次性替换
+        let result = llm_client.translate(&config.llm, &text, &target_lang).await
+            .map_err(|e| format!("Translation API error: {}", e))?;
+        
+        translated_text = result.translated_text;
+        completion_tokens = result.completion_tokens;
+        duration_ms = result.duration_ms;
+        tokens_per_second = result.tokens_per_second;
+        
+        // 替换选中的文本
+        state.text_handler.paste(&translated_text).await
+            .map_err(|e| format!("Failed to paste translation: {}", e))?;
     }
-    
-    // 计算性能指标
-    let tokens_per_second = completion_tokens.map(|t| {
-        if duration_ms > 0 {
-            (t as f64) / (duration_ms as f64 / 1000.0)
-        } else {
-            0.0
-        }
-    });
     
     info!(
         "Translation completed: {} chars -> {} chars, {} tokens, {}ms, {:.1} tokens/s",
@@ -349,9 +367,9 @@ async fn trigger_translation(app: &tauri::AppHandle, mode: &str) -> Result<(), B
         error!("Failed to save translation history: {}", e);
     }
     
-    // 保存性能指标
+    // 保存性能指标（使用实际的操作模式）
     if let Err(e) = state.database.insert_metric(
-        "translation",
+        mode,  // "selected" 或 "full"
         duration_ms as i64,
         true,
         None,
@@ -417,14 +435,35 @@ pub fn run() {
             // 设置系统托盘
             #[cfg(desktop)]
             {
-                use tauri::menu::{MenuBuilder, MenuItemBuilder};
+                use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
                 use tauri::tray::TrayIconBuilder;
+
+                // 获取配置中的语言列表（使用同步读取）
+                let config = state.config.blocking_read();
+                let current_target = config.language.current_target.clone();
+                
+                // 构建语言子菜单
+                let mut lang_submenu = SubmenuBuilder::new(app, "切换目标语言");
+                for lang in &config.language.favorite_languages {
+                    let is_current = lang.code == current_target;
+                    let label = if is_current {
+                        format!("✓ {}", lang.name)
+                    } else {
+                        lang.name.clone()
+                    };
+                    let item = MenuItemBuilder::with_id(&format!("lang_{}", lang.code), label)
+                        .build(app)?;
+                    lang_submenu = lang_submenu.item(&item);
+                }
+                let lang_menu = lang_submenu.build()?;
 
                 let toggle = MenuItemBuilder::with_id("toggle", "启用/暂停").build(app)?;
                 let settings = MenuItemBuilder::with_id("settings", "打开设置").build(app)?;
                 let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
                 let menu = MenuBuilder::new(app)
+                    .item(&lang_menu)
+                    .separator()
                     .item(&toggle)
                     .separator()
                     .item(&settings)
@@ -432,27 +471,47 @@ pub fn run() {
                     .item(&quit)
                     .build()?;
 
+                let app_state = state.clone();
                 let _tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().cloned().expect("no icon"))
                     .menu(&menu)
                     .show_menu_on_left_click(false)
-                    .on_menu_event(|app, event| match event.id().as_ref() {
-                        "toggle" => {
-                            info!("Toggle translation monitoring");
-                            // TODO: 实现启用/暂停逻辑
+                    .on_menu_event(move |app, event| {
+                        let event_id = event.id().as_ref();
+                        
+                        // 处理语言切换
+                        if let Some(lang_code) = event_id.strip_prefix("lang_") {
+                            info!("Switching language to: {}", lang_code);
+                            let state = app_state.clone();
+                            let lang = lang_code.to_string();
+                            tauri::async_runtime::spawn(async move {
+                                let mut config = state.get_config().await;
+                                config.language.current_target = lang;
+                                if let Err(e) = state.save_config(&config).await {
+                                    error!("Failed to save language config: {}", e);
+                                }
+                            });
+                            return;
                         }
-                        "settings" => {
-                            info!("Opening settings window");
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
+                        
+                        match event_id {
+                            "toggle" => {
+                                info!("Toggle translation monitoring");
+                                // TODO: 实现启用/暂停逻辑
                             }
+                            "settings" => {
+                                info!("Opening settings window");
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                            "quit" => {
+                                info!("Quitting application");
+                                app.exit(0);
+                            }
+                            _ => {}
                         }
-                        "quit" => {
-                            info!("Quitting application");
-                            app.exit(0);
-                        }
-                        _ => {}
                     })
                     .build(app)?;
             }
@@ -464,6 +523,7 @@ pub fn run() {
             commands::save_config,
             commands::test_llm_connection,
             commands::get_history,
+            commands::clear_history,
             commands::get_performance_stats,
             commands::check_hotkey_conflicts,
             commands::switch_language,
