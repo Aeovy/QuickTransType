@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { HotkeyConfig, Hotkey } from "../stores/appState";
   import { invoke } from "@tauri-apps/api/core";
+  import type { Hotkey, HotkeyConfig } from "../stores/appState";
 
   export let hotkeyConfig: HotkeyConfig;
   export let onUpdate: (selected: Hotkey, full: Hotkey) => void;
@@ -134,9 +134,9 @@
       class="hotkey-input"
       class:recording={selectedRecording}
       tabindex="0"
-      on:click={(e) => { selectedRecording = true; e.currentTarget.focus(); }}
-      on:keydown={handleSelectedKeydown}
-      on:blur={() => (selectedRecording = false)}
+      onclick={(e) => { selectedRecording = true; e.currentTarget.focus(); }}
+      onkeydown={handleSelectedKeydown}
+      onblur={() => (selectedRecording = false)}
     >
       {#if selectedRecording}
         <span class="recording-text">按下热键组合...</span>
@@ -153,9 +153,9 @@
       class="hotkey-input"
       class:recording={fullRecording}
       tabindex="0"
-      on:click={(e) => { fullRecording = true; e.currentTarget.focus(); }}
-      on:keydown={handleFullKeydown}
-      on:blur={() => (fullRecording = false)}
+      onclick={(e) => { fullRecording = true; e.currentTarget.focus(); }}
+      onkeydown={handleFullKeydown}
+      onblur={() => (fullRecording = false)}
     >
       {#if fullRecording}
         <span class="recording-text">按下热键...</span>
@@ -171,7 +171,7 @@
           type="number"
           id="count"
           bind:value={consecutiveCount}
-          on:change={updateConsecutiveCount}
+          onchange={updateConsecutiveCount}
           min="2"
           max="10"
         />
@@ -186,7 +186,7 @@
   {/if}
 
   <div class="button-row">
-    <button class="btn primary" on:click={onSave}>保存设置</button>
+    <button class="btn primary" onclick={onSave}>保存设置</button>
   </div>
 </div>
 
