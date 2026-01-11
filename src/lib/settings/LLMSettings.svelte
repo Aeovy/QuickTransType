@@ -37,7 +37,7 @@
       type="text"
       id="base-url"
       bind:value={llmConfig.base_url}
-      on:input={handleChange}
+      oninput={handleChange}
       placeholder="https://api.openai.com/v1"
     />
   </div>
@@ -50,7 +50,7 @@
           type="text"
           id="api-key"
           bind:value={llmConfig.api_key}
-          on:input={handleChange}
+          oninput={handleChange}
           placeholder="sk-..."
         />
       {:else}
@@ -58,13 +58,13 @@
           type="password"
           id="api-key"
           bind:value={llmConfig.api_key}
-          on:input={handleChange}
+          oninput={handleChange}
           placeholder="sk-..."
         />
       {/if}
       <button
         class="icon-button"
-        on:click={() => (showApiKey = !showApiKey)}
+        onclick={() => (showApiKey = !showApiKey)}
         title={showApiKey ? "隐藏" : "显示"}
       >
         {showApiKey ? "👁️" : "👁️‍🗨️"}
@@ -79,7 +79,7 @@
         type="text"
         id="model"
         bind:value={llmConfig.model}
-        on:input={handleChange}
+        oninput={handleChange}
         list="model-list"
         placeholder="gpt-4o-mini"
       />
@@ -98,7 +98,7 @@
         type="range"
         id="temperature"
         bind:value={llmConfig.temperature}
-        on:input={handleChange}
+        oninput={handleChange}
         min="0"
         max="2"
         step="0.1"
@@ -111,7 +111,7 @@
         type="range"
         id="top-p"
         bind:value={llmConfig.top_p}
-        on:input={handleChange}
+        oninput={handleChange}
         min="0"
         max="1"
         step="0.01"
@@ -124,7 +124,7 @@
     <textarea
       id="system-prompt"
       bind:value={llmConfig.system_prompt}
-      on:input={handleChange}
+      oninput={handleChange}
       rows="3"
       placeholder="You are a professional translator..."
     ></textarea>
@@ -136,17 +136,47 @@
     <textarea
       id="user-prompt"
       bind:value={llmConfig.user_prompt_template}
-      on:input={handleChange}
+      oninput={handleChange}
       rows="3"
       placeholder="将下列文本翻译为&#123;target_language&#125;，保持原有格式：&#123;text&#125;"
     ></textarea>
   </div>
 
+  <div class="form-group">
+    <label>输出模式</label>
+    <div class="toggle-group">
+      <label class="toggle-option">
+        <input
+          type="radio"
+          bind:group={llmConfig.stream_mode}
+          value={true}
+          onchange={handleChange}
+        />
+        <span class="toggle-label">
+          <span class="toggle-title">Stream（流式）</span>
+          <span class="toggle-desc">逐字输出翻译结果，体验更流畅</span>
+        </span>
+      </label>
+      <label class="toggle-option">
+        <input
+          type="radio"
+          bind:group={llmConfig.stream_mode}
+          value={false}
+          onchange={handleChange}
+        />
+        <span class="toggle-label">
+          <span class="toggle-title">Invoke（一次性）</span>
+          <span class="toggle-desc">等待完成后一次性替换，更稳定</span>
+        </span>
+      </label>
+    </div>
+  </div>
+
   <div class="button-row">
-    <button class="btn secondary" on:click={handleTestConnection} disabled={isTesting}>
+    <button class="btn secondary" onclick={handleTestConnection} disabled={isTesting}>
       {isTesting ? "测试中..." : "测试连接"}
     </button>
-    <button class="btn primary" on:click={onSave}>
+    <button class="btn primary" onclick={onSave}>
       保存设置
     </button>
   </div>
@@ -270,5 +300,57 @@
   .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .toggle-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .toggle-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 15px;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .toggle-option:hover {
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.05);
+  }
+
+  .toggle-option:has(input:checked) {
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.1);
+  }
+
+  .toggle-option input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    accent-color: #00d4ff;
+  }
+
+  .toggle-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .toggle-title {
+    color: #eaeaea;
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+
+  .toggle-desc {
+    color: #888;
+    font-size: 0.8rem;
   }
 </style>
