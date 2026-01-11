@@ -38,6 +38,7 @@ dependencies = [
  "cocoa 0.26.1",
  "dirs",
  "enigo",
+ "futures-util",
  "log",
  "objc",
  "plist",
