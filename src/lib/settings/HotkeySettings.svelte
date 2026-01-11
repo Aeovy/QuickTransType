@@ -133,8 +133,10 @@
     <button
       class="hotkey-input"
       class:recording={selectedRecording}
-      on:click={() => (selectedRecording = true)}
+      tabindex="0"
+      on:click={(e) => { selectedRecording = true; e.currentTarget.focus(); }}
       on:keydown={handleSelectedKeydown}
+      on:blur={() => (selectedRecording = false)}
     >
       {#if selectedRecording}
         <span class="recording-text">按下热键组合...</span>
@@ -150,8 +152,10 @@
     <button
       class="hotkey-input"
       class:recording={fullRecording}
-      on:click={() => (fullRecording = true)}
+      tabindex="0"
+      on:click={(e) => { fullRecording = true; e.currentTarget.focus(); }}
       on:keydown={handleFullKeydown}
+      on:blur={() => (fullRecording = false)}
     >
       {#if fullRecording}
         <span class="recording-text">按下热键...</span>

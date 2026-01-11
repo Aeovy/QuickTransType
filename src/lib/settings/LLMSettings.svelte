@@ -132,13 +132,13 @@
 
   <div class="form-group">
     <label for="user-prompt">User Prompt 模板</label>
-    <p class="hint">可用变量: {"{target_language}"}, {"{text}"}</p>
+    <p class="hint">可用变量: &#123;target_language&#125;, &#123;text&#125;</p>
     <textarea
       id="user-prompt"
       bind:value={llmConfig.user_prompt_template}
       on:input={handleChange}
       rows="3"
-      placeholder="将下列文本翻译为{target_language}，保持原有格式：{text}"
+      placeholder="将下列文本翻译为&#123;target_language&#125;，保持原有格式：&#123;text&#125;"
     ></textarea>
   </div>
 
