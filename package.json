@@ -1,19 +1,22 @@
 {
   "name": "aityping",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI-powered translation assistant",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "license": "MIT",
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.1.1",
     "@tauri-apps/cli": "^2.9.6",
     "svelte": "^5.46.1",
+    "typescript": "^5.0.0",
     "vite": "^6.4.1"
   },
   "dependencies": {
