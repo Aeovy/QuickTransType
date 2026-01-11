@@ -71,6 +71,17 @@ pub async fn get_history(
         .map_err(|e| e.to_string())
 }
 
+/// 清空所有翻译历史
+#[tauri::command]
+pub async fn clear_history(state: State<'_, Arc<AppState>>) -> Result<u64, String> {
+    info!("Clearing all translation history");
+    state
+        .database
+        .clear_all_history()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 获取性能统计
 #[tauri::command]
 pub async fn get_performance_stats(
@@ -130,13 +141,13 @@ pub async fn translate_text(
     let duration_ms = duration.as_millis() as i64;
 
     match &result {
-        Ok(translated) => {
+        Ok(translation_result) => {
             // 记录成功的翻译
             if let Err(e) = state
                 .database
                 .insert_translation(
                     &text,
-                    translated,
+                    &translation_result.translated_text,
                     None,
                     &config.language.current_target,
                     &mode,
@@ -146,10 +157,18 @@ pub async fn translate_text(
                 error!("Failed to save translation: {}", e);
             }
 
-            // 记录性能指标
+            // 记录性能指标（包含 token 信息）
             if let Err(e) = state
                 .database
-                .record_metric(&mode, duration_ms, true, None, text.len() as i64)
+                .insert_metric(
+                    &mode,
+                    duration_ms,
+                    true,
+                    None,
+                    text.len() as i64,
+                    translation_result.completion_tokens,
+                    translation_result.tokens_per_second,
+                )
                 .await
             {
                 error!("Failed to record metric: {}", e);
@@ -160,7 +179,12 @@ pub async fn translate_text(
                 error!("Failed to cleanup history: {}", e);
             }
 
-            info!("Translation completed in {}ms", duration_ms);
+            info!(
+                "Translation completed in {}ms, {} tokens, {:.1} tokens/s",
+                duration_ms,
+                translation_result.completion_tokens.unwrap_or(0),
+                translation_result.tokens_per_second.unwrap_or(0.0)
+            );
         }
         Err(e) => {
             // 记录失败的指标
@@ -173,7 +197,7 @@ pub async fn translate_text(
 
             if let Err(record_err) = state
                 .database
-                .record_metric(&mode, duration_ms, false, Some(error_type), 0)
+                .insert_metric(&mode, duration_ms, false, Some(error_type), 0, None, None)
                 .await
             {
                 error!("Failed to record metric: {}", record_err);
@@ -183,5 +207,7 @@ pub async fn translate_text(
         }
     }
 
-    result.map_err(|e| e.to_string())
+    result
+        .map(|r| r.translated_text)
+        .map_err(|e| e.to_string())
 }
