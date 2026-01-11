@@ -44,6 +44,13 @@ pub struct LLMConfig {
     pub system_prompt: String,
     /// User Prompt 模板，支持 {target_language} 和 {text} 变量
     pub user_prompt_template: String,
+    /// 是否使用流式传输模式
+    #[serde(default = "default_stream_mode")]
+    pub stream_mode: bool,
+}
+
+fn default_stream_mode() -> bool {
+    true
 }
 
 impl Default for LLMConfig {
@@ -59,6 +66,7 @@ impl Default for LLMConfig {
                     .to_string(),
             user_prompt_template: "将下列文本翻译为{target_language}，保持原有格式：{text}"
                 .to_string(),
+            stream_mode: true,
         }
     }
 }

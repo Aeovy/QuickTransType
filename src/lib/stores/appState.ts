@@ -22,6 +22,7 @@ export interface LLMConfig {
   top_p: number;
   system_prompt: string;
   user_prompt_template: string;
+  stream_mode: boolean;
 }
 
 export interface HotkeyConfig {
@@ -59,6 +60,7 @@ const defaultConfig: AppConfig = {
       "You are a professional translator. Maintain the original formatting of the text.",
     user_prompt_template:
       "将下列文本翻译为{target_language}，保持原有格式：{text}",
+    stream_mode: true,
   },
   hotkey: {
     selected_mode: {
