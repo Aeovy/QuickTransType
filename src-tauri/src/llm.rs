@@ -51,6 +51,14 @@ struct ChatCompletionRequest {
     top_p: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
+}
+
+/// 流式选项
+#[derive(Debug, Serialize)]
+struct StreamOptions {
+    include_usage: bool,
 }
 
 /// 消息结构
@@ -191,6 +199,7 @@ impl LLMClient {
             temperature: config.temperature,
             top_p: config.top_p,
             stream: None,
+            stream_options: None,
         };
 
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
@@ -292,6 +301,9 @@ impl LLMClient {
             temperature: config.temperature,
             top_p: config.top_p,
             stream: Some(true),
+            stream_options: Some(StreamOptions {
+                include_usage: true,
+            }),
         };
 
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
@@ -348,18 +360,24 @@ impl LLMClient {
                     }
 
                     if let Some(json_str) = line.strip_prefix("data: ") {
-                        if let Ok(chunk_data) = serde_json::from_str::<StreamChunk>(json_str) {
-                            // 检查 usage (某些 API 在流式响应的最后一块包含 usage)
-                            if let Some(usage) = &chunk_data.usage {
-                                total_tokens = usage.completion_tokens;
-                            }
+                        match serde_json::from_str::<StreamChunk>(json_str) {
+                            Ok(chunk_data) => {
+                                // 检查 usage (某些 API 在流式响应的最后一块包含 usage)
+                                if let Some(usage) = &chunk_data.usage {
+                                    total_tokens = usage.completion_tokens;
+                                    debug!("Received usage info: {} completion_tokens", total_tokens);
+                                }
 
-                            for choice in chunk_data.choices {
-                                if let Some(content) = choice.delta.content {
-                                    if !content.is_empty() {
-                                        let _ = tx.send(StreamEvent::Delta(content)).await;
+                                for choice in chunk_data.choices {
+                                    if let Some(content) = choice.delta.content {
+                                        if !content.is_empty() {
+                                            let _ = tx.send(StreamEvent::Delta(content)).await;
+                                        }
                                     }
                                 }
+                            }
+                            Err(e) => {
+                                debug!("Failed to parse chunk: {}, raw: {}", e, json_str);
                             }
                         }
                     }
