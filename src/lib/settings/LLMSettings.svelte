@@ -185,7 +185,7 @@
 <style>
   .settings-section h2 {
     margin: 0 0 20px 0;
-    color: #00d4ff;
+    color: #2563eb;
     font-size: 1.3rem;
   }
 
@@ -196,7 +196,7 @@
   .form-group label {
     display: block;
     margin-bottom: 8px;
-    color: #ccc;
+    color: #4b5563;
     font-size: 0.9rem;
   }
 
@@ -205,18 +205,20 @@
   .form-group textarea {
     width: 100%;
     padding: 12px;
-    border: 1px solid #333;
+    border: 1px solid #d1d5db;
     border-radius: 6px;
-    background: #0f1729;
-    color: #eaeaea;
+    background: #ffffff;
+    color: #1f2937;
     font-size: 0.95rem;
     box-sizing: border-box;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
 
   .form-group input:focus,
   .form-group textarea:focus {
     outline: none;
-    border-color: #00d4ff;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
   }
 
   .form-group input[type="range"] {
@@ -244,20 +246,22 @@
 
   .icon-button {
     padding: 10px 15px;
-    border: 1px solid #333;
+    border: 1px solid #d1d5db;
     border-radius: 6px;
-    background: #0f1729;
+    background: #f9fafb;
     cursor: pointer;
     font-size: 1rem;
+    color: #4b5563;
   }
 
   .icon-button:hover {
-    background: #1a2744;
+    background: #f3f4f6;
+    border-color: #9ca3af;
   }
 
   .hint {
     margin: 0 0 8px 0;
-    color: #666;
+    color: #6b7280;
     font-size: 0.8rem;
   }
 
@@ -279,22 +283,22 @@
   }
 
   .btn.primary {
-    background: #00d4ff;
-    color: #0f1729;
+    background: #2563eb;
+    color: #ffffff;
   }
 
   .btn.primary:hover {
-    background: #00b8e6;
+    background: #1d4ed8;
   }
 
   .btn.secondary {
     background: transparent;
-    color: #00d4ff;
-    border: 1px solid #00d4ff;
+    color: #2563eb;
+    border: 1px solid #2563eb;
   }
 
   .btn.secondary:hover {
-    background: rgba(0, 212, 255, 0.1);
+    background: rgba(37, 99, 235, 0.05);
   }
 
   .btn:disabled {
@@ -313,8 +317,8 @@
     align-items: flex-start;
     gap: 12px;
     padding: 12px 15px;
-    background: #1a1a2e;
-    border: 1px solid #333;
+    background: #f9fafb;
+    border: 1px solid #d1d5db;
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;

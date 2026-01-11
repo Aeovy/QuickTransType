@@ -260,7 +260,7 @@
 <style>
   .performance-section h2 {
     margin: 0 0 20px 0;
-    color: #00d4ff;
+    color: #2563eb;
     font-size: 1.3rem;
   }
 
@@ -276,48 +276,49 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    color: #888;
+    color: #6b7280;
     cursor: pointer;
   }
 
   .period-selector input[type="radio"] {
-    accent-color: #00d4ff;
+    accent-color: #2563eb;
   }
 
   .refresh-btn {
     margin-left: auto;
     padding: 8px 16px;
-    border: 1px solid #333;
+    border: 1px solid #d1d5db;
     border-radius: 6px;
     background: transparent;
-    color: #888;
+    color: #6b7280;
     cursor: pointer;
   }
 
   .refresh-btn:hover:not(:disabled) {
-    border-color: #00d4ff;
-    color: #00d4ff;
+    border-color: #2563eb;
+    color: #2563eb;
+    background: #eff6ff;
   }
 
   .warning-banner {
     padding: 12px 20px;
-    background: rgba(251, 191, 36, 0.1);
-    border: 1px solid #fbbf24;
+    background: #fffbeb;
+    border: 1px solid #f59e0b;
     border-radius: 8px;
-    color: #fbbf24;
+    color: #b45309;
     margin-bottom: 20px;
   }
 
   .warning-banner.error {
-    background: rgba(239, 68, 68, 0.1);
+    background: #fef2f2;
     border-color: #ef4444;
-    color: #ef4444;
+    color: #b91c1c;
   }
 
   .loading, .empty {
     text-align: center;
     padding: 40px;
-    color: #666;
+    color: #6b7280;
   }
 
   .stats-grid {
@@ -328,16 +329,17 @@
   }
 
   .stat-card {
-    background: #0f1729;
-    border: 1px solid #333;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
     border-radius: 10px;
     padding: 20px;
     text-align: center;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
 
   .stat-card h3 {
     margin: 0 0 10px 0;
-    color: #888;
+    color: #6b7280;
     font-size: 0.85rem;
     font-weight: normal;
   }
@@ -346,20 +348,13 @@
     margin: 0;
     font-size: 1.8rem;
     font-weight: 600;
-    color: #00d4ff;
+    color: #2563eb;
   }
 
   .stat-value .unit {
     font-size: 0.9rem;
     font-weight: normal;
-    color: #888;
-  }
-
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 15px;
-    margin-bottom: 25px;
+    color: #6b7280;
   }
 
   .charts-grid {
@@ -370,10 +365,11 @@
   }
 
   .chart-card {
-    background: #0f1729;
-    border: 1px solid #333;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
     border-radius: 10px;
     padding: 20px;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
 
   .chart-card.full-width {
@@ -382,7 +378,7 @@
 
   .chart-card h3 {
     margin: 0 0 15px 0;
-    color: #ccc;
+    color: #374151;
     font-size: 0.95rem;
   }
 
@@ -400,14 +396,14 @@
 
   .bar-label {
     width: 80px;
-    color: #888;
+    color: #6b7280;
     font-size: 0.85rem;
   }
 
   .bar-container {
     flex: 1;
     height: 24px;
-    background: #1a2744;
+    background: #f3f4f6;
     border-radius: 4px;
     overflow: hidden;
   }
@@ -429,7 +425,7 @@
   .bar-value {
     width: 50px;
     text-align: right;
-    color: #ccc;
+    color: #4b5563;
     font-size: 0.9rem;
   }
 
@@ -449,7 +445,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    color: #ccc;
+    color: #4b5563;
     font-size: 0.95rem;
   }
 
@@ -479,18 +475,18 @@
 
   .duration-item .label {
     display: block;
-    color: #666;
+    color: #6b7280;
     font-size: 0.8rem;
     margin-bottom: 8px;
   }
 
   .duration-item .value {
     font-size: 1.2rem;
-    color: #ccc;
+    color: #374151;
   }
 
   .duration-item .value.highlight {
-    color: #00d4ff;
+    color: #2563eb;
     font-weight: 600;
   }
 
@@ -503,17 +499,17 @@
   .error-table td {
     padding: 12px 15px;
     text-align: left;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid #e5e7eb;
   }
 
   .error-table th {
-    color: #888;
+    color: #6b7280;
     font-weight: normal;
     font-size: 0.85rem;
   }
 
   .error-table td {
-    color: #ccc;
+    color: #374151;
   }
 
   @media (max-width: 768px) {

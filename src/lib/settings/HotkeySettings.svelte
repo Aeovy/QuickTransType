@@ -193,7 +193,7 @@
 <style>
   .settings-section h2 {
     margin: 0 0 20px 0;
-    color: #00d4ff;
+    color: #2563eb;
     font-size: 1.3rem;
   }
 
@@ -204,55 +204,56 @@
   .form-group label {
     display: block;
     margin-bottom: 8px;
-    color: #ccc;
+    color: #4b5563;
     font-size: 0.9rem;
   }
 
   .hint {
     margin: 0 0 10px 0;
-    color: #666;
+    color: #6b7280;
     font-size: 0.8rem;
   }
 
   .hotkey-input {
     width: 100%;
     padding: 15px;
-    border: 2px solid #333;
+    border: 2px solid #d1d5db;
     border-radius: 8px;
-    background: #0f1729;
-    color: #00d4ff;
+    background: #ffffff;
+    color: #2563eb;
     font-size: 1.1rem;
     font-weight: 600;
     text-align: center;
     cursor: pointer;
     transition: all 0.2s;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
 
   .hotkey-input:hover {
-    border-color: #00d4ff;
+    border-color: #2563eb;
   }
 
   .hotkey-input:focus {
     outline: none;
-    border-color: #00d4ff;
-    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.2);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
   }
 
   .hotkey-input.recording {
-    border-color: #fbbf24;
+    border-color: #d97706;
     animation: pulse 1s infinite;
   }
 
   .recording-text {
-    color: #fbbf24;
+    color: #d97706;
   }
 
   @keyframes pulse {
     0%, 100% {
-      box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4);
+      box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.4);
     }
     50% {
-      box-shadow: 0 0 0 10px rgba(251, 191, 36, 0);
+      box-shadow: 0 0 0 10px rgba(217, 119, 6, 0);
     }
   }
 
@@ -265,26 +266,26 @@
 
   .consecutive-count label {
     margin-bottom: 0;
-    color: #888;
+    color: #6b7280;
   }
 
   .consecutive-count input {
     width: 60px;
     padding: 8px;
-    border: 1px solid #333;
+    border: 1px solid #d1d5db;
     border-radius: 6px;
-    background: #0f1729;
-    color: #eaeaea;
+    background: #ffffff;
+    color: #1f2937;
     font-size: 0.95rem;
     text-align: center;
   }
 
   .warning {
     padding: 12px 15px;
-    background: rgba(251, 191, 36, 0.1);
-    border: 1px solid #fbbf24;
+    background: #fffbeb;
+    border: 1px solid #d97706;
     border-radius: 6px;
-    color: #fbbf24;
+    color: #d97706;
     font-size: 0.9rem;
     margin-bottom: 20px;
   }
@@ -306,11 +307,11 @@
   }
 
   .btn.primary {
-    background: #00d4ff;
-    color: #0f1729;
+    background: #2563eb;
+    color: #ffffff;
   }
 
   .btn.primary:hover {
-    background: #00b8e6;
+    background: #1d4ed8;
   }
 </style>

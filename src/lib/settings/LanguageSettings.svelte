@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { LanguageConfig, Language } from "../stores/appState";
+    import type { Language, LanguageConfig } from "../stores/appState";
 
     export let languageConfig: LanguageConfig;
     export let historyLimit: number;
@@ -158,7 +158,7 @@
 <style>
     .settings-section h2 {
         margin: 0 0 20px 0;
-        color: #00d4ff;
+        color: #2563eb;
         font-size: 1.3rem;
     }
 
@@ -169,19 +169,19 @@
     .form-group label {
         display: block;
         margin-bottom: 8px;
-        color: #ccc;
+        color: #4b5563;
         font-size: 0.9rem;
     }
 
     .hint {
         margin: 0 0 10px 0;
-        color: #666;
+        color: #6b7280;
         font-size: 0.8rem;
     }
 
     .auto-save-hint {
         text-align: center;
-        color: #666;
+        color: #6b7280;
         font-size: 0.85rem;
         margin-top: 20px;
     }
@@ -190,18 +190,20 @@
     input[type="text"] {
         width: 100%;
         padding: 12px;
-        border: 1px solid #333;
+        border: 1px solid #d1d5db;
         border-radius: 6px;
-        background: #0f1729;
-        color: #eaeaea;
+        background: #ffffff;
+        color: #1f2937;
         font-size: 0.95rem;
         box-sizing: border-box;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     }
 
     select:focus,
     input:focus {
         outline: none;
-        border-color: #00d4ff;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
     }
 
     .language-list {
@@ -214,19 +216,20 @@
         display: flex;
         align-items: center;
         padding: 10px 15px;
-        background: #0f1729;
-        border: 1px solid #333;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
         border-radius: 6px;
         margin-bottom: 8px;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     }
 
     .lang-name {
         flex: 1;
-        color: #eaeaea;
+        color: #1f2937;
     }
 
     .lang-code {
-        color: #666;
+        color: #6b7280;
         font-size: 0.85rem;
         margin-right: 15px;
     }
@@ -242,7 +245,7 @@
     }
 
     .remove-btn:hover {
-        background: rgba(239, 68, 68, 0.1);
+        background: #fecaca;
     }
 
     .add-language {
@@ -258,32 +261,33 @@
 
     .preset-btn {
         padding: 6px 12px;
-        border: 1px dashed #444;
+        border: 1px dashed #d1d5db;
         border-radius: 20px;
-        background: transparent;
-        color: #888;
+        background: #f9fafb;
+        color: #6b7280;
         cursor: pointer;
         font-size: 0.85rem;
         transition: all 0.2s;
     }
 
     .preset-btn:hover {
-        border-color: #00d4ff;
-        color: #00d4ff;
+        border-color: #2563eb;
+        color: #2563eb;
+        background: #eff6ff;
     }
 
     .add-custom-btn {
         padding: 10px 20px;
-        border: 1px solid #00d4ff;
+        border: 1px solid #2563eb;
         border-radius: 6px;
         background: transparent;
-        color: #00d4ff;
+        color: #2563eb;
         cursor: pointer;
         font-size: 0.9rem;
     }
 
     .add-custom-btn:hover {
-        background: rgba(0, 212, 255, 0.1);
+        background: rgba(37, 99, 235, 0.05);
     }
 
     .dialog-overlay {
@@ -292,24 +296,26 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
+        background: rgba(0, 0, 0, 0.5);
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 100;
+        backdrop-filter: blur(2px);
     }
 
     .dialog {
-        background: #16213e;
+        background: #ffffff;
         padding: 25px;
         border-radius: 12px;
         width: 400px;
         max-width: 90%;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
     }
 
     .dialog h3 {
         margin: 0 0 20px 0;
-        color: #00d4ff;
+        color: #2563eb;
     }
 
     .dialog-buttons {
@@ -336,22 +342,23 @@
     }
 
     .btn.primary {
-        background: #00d4ff;
-        color: #0f1729;
+        background: #2563eb;
+        color: #ffffff;
     }
 
     .btn.primary:hover {
-        background: #00b8e6;
+        background: #1d4ed8;
     }
 
     .btn.secondary {
         background: transparent;
-        color: #888;
-        border: 1px solid #444;
+        color: #6b7280;
+        border: 1px solid #d1d5db;
     }
 
     .btn.secondary:hover {
-        color: #eaeaea;
-        border-color: #666;
+        color: #1f2937;
+        border-color: #9ca3af;
+        background: #f3f4f6;
     }
 </style>
