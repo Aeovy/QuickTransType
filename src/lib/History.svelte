@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { emit } from "@tauri-apps/api/event";
+  import { onMount } from "svelte";
 
   interface TranslationRecord {
     id: number;
@@ -76,20 +77,42 @@
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + "...";
   }
+
+  let showClearConfirm = false;
+
+  async function confirmClearHistory() {
+    showClearConfirm = true;
+  }
+
+  async function clearHistory() {
+    try {
+      await invoke("clear_history");
+      showClearConfirm = false;
+      currentPage = 1;
+      loadHistory();
+      // 通知性能监控组件刷新
+      await emit("history-cleared");
+    } catch (e) {
+      console.error("Failed to clear history:", e);
+    }
+  }
 </script>
 
 <div class="history-section">
-  <h2>翻译历史</h2>
+  <div class="header-row">
+    <h2>翻译历史</h2>
+    <button class="clear-btn" onclick={confirmClearHistory}>清空历史</button>
+  </div>
 
   <div class="filters">
     <div class="search-box">
       <input
         type="text"
         bind:value={searchQuery}
-        on:keyup={(e) => e.key === "Enter" && handleSearch()}
+        onkeyup={(e) => e.key === "Enter" && handleSearch()}
         placeholder="搜索翻译内容..."
       />
-      <button on:click={handleSearch}>搜索</button>
+      <button onclick={handleSearch}>搜索</button>
     </div>
 
     <div class="mode-filter">
@@ -98,7 +121,7 @@
           type="radio"
           bind:group={modeFilter}
           value="all"
-          on:change={handleModeChange}
+          onchange={handleModeChange}
         />
         全部
       </label>
@@ -107,7 +130,7 @@
           type="radio"
           bind:group={modeFilter}
           value="selected"
-          on:change={handleModeChange}
+          onchange={handleModeChange}
         />
         选中翻译
       </label>
@@ -116,7 +139,7 @@
           type="radio"
           bind:group={modeFilter}
           value="full"
-          on:change={handleModeChange}
+          onchange={handleModeChange}
         />
         全文翻译
       </label>
@@ -142,7 +165,7 @@
             <div class="text-block">
               <span class="label">原文</span>
               <p>{truncateText(record.original_text)}</p>
-              <button class="copy-btn" on:click={() => copyToClipboard(record.original_text)}>
+              <button class="copy-btn" onclick={() => copyToClipboard(record.original_text)}>
                 复制
               </button>
             </div>
@@ -150,7 +173,7 @@
             <div class="text-block">
               <span class="label">译文</span>
               <p>{truncateText(record.translated_text)}</p>
-              <button class="copy-btn" on:click={() => copyToClipboard(record.translated_text)}>
+              <button class="copy-btn" onclick={() => copyToClipboard(record.translated_text)}>
                 复制
               </button>
             </div>
@@ -161,23 +184,58 @@
 
     {#if totalPages > 1}
       <div class="pagination">
-        <button disabled={currentPage === 1} on:click={() => goToPage(currentPage - 1)}>
+        <button disabled={currentPage === 1} onclick={() => goToPage(currentPage - 1)}>
           上一页
         </button>
         <span>{currentPage} / {totalPages}</span>
-        <button disabled={currentPage === totalPages} on:click={() => goToPage(currentPage + 1)}>
+        <button disabled={currentPage === totalPages} onclick={() => goToPage(currentPage + 1)}>
           下一页
         </button>
       </div>
     {/if}
   {/if}
+
+  {#if showClearConfirm}
+    <div class="dialog-overlay">
+      <div class="dialog">
+        <h3>确认清空历史</h3>
+        <p>确定要清空所有翻译历史记录吗？此操作无法撤销。</p>
+        <div class="dialog-buttons">
+          <button class="btn secondary" onclick={() => showClearConfirm = false}>取消</button>
+          <button class="btn danger" onclick={clearHistory}>确认清空</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
   .history-section h2 {
-    margin: 0 0 20px 0;
+    margin: 0;
     color: #00d4ff;
     font-size: 1.3rem;
+  }
+
+  .clear-btn {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid #ef4444;
+    border-radius: 6px;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+
+  .clear-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
   }
 
   .filters {
@@ -375,5 +433,74 @@
 
   .pagination span {
     color: #666;
+  }
+
+  .dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .dialog {
+    background: #16213e;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 25px;
+    min-width: 400px;
+    max-width: 500px;
+  }
+
+  .dialog h3 {
+    margin: 0 0 15px 0;
+    color: #00d4ff;
+    font-size: 1.1rem;
+  }
+
+  .dialog p {
+    margin: 0 0 20px 0;
+    color: #ccc;
+    line-height: 1.5;
+  }
+
+  .dialog-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: flex-end;
+  }
+
+  .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+  }
+
+  .btn.secondary {
+    background: transparent;
+    color: #888;
+    border: 1px solid #333;
+  }
+
+  .btn.secondary:hover {
+    border-color: #00d4ff;
+    color: #00d4ff;
+  }
+
+  .btn.danger {
+    background: #ef4444;
+    color: white;
+  }
+
+  .btn.danger:hover {
+    background: #dc2626;
   }
 </style>
