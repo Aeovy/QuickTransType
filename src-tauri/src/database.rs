@@ -6,7 +6,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::path::PathBuf;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// 数据库管理器
 pub struct Database {
@@ -108,12 +108,25 @@ impl Database {
                 duration_ms INTEGER NOT NULL,
                 success INTEGER NOT NULL,
                 error_type TEXT,
-                char_count INTEGER NOT NULL
+                char_count INTEGER NOT NULL,
+                completion_tokens INTEGER,
+                tokens_per_second REAL
             )
             "#,
         )
         .execute(&self.pool)
         .await?;
+
+        // 添加新字段（如果表已存在）
+        sqlx::query("ALTER TABLE metrics ADD COLUMN completion_tokens INTEGER")
+            .execute(&self.pool)
+            .await
+            .ok(); // 忽略错误（列可能已存在）
+        
+        sqlx::query("ALTER TABLE metrics ADD COLUMN tokens_per_second REAL")
+            .execute(&self.pool)
+            .await
+            .ok(); // 忽略错误
 
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp DESC)",
@@ -260,6 +273,28 @@ impl Database {
         Ok(deleted)
     }
 
+    /// 清空所有翻译历史和性能指标
+    pub async fn clear_all_history(&self) -> Result<u64> {
+        // 清空翻译历史
+        let translations_result = sqlx::query("DELETE FROM translations")
+            .execute(&self.pool)
+            .await?;
+        let translations_deleted = translations_result.rows_affected();
+
+        // 清空性能指标
+        let metrics_result = sqlx::query("DELETE FROM metrics")
+            .execute(&self.pool)
+            .await?;
+        let metrics_deleted = metrics_result.rows_affected();
+
+        info!(
+            "Cleared all history: {} translations, {} metrics", 
+            translations_deleted, 
+            metrics_deleted
+        );
+        Ok(translations_deleted)
+    }
+
     /// 记录性能指标
     pub async fn record_metric(
         &self,
@@ -289,6 +324,39 @@ impl Database {
         Ok(())
     }
 
+    /// 插入带有 tokens 信息的性能指标
+    pub async fn insert_metric(
+        &self,
+        operation_type: &str,
+        duration_ms: i64,
+        success: bool,
+        error_type: Option<&str>,
+        char_count: i64,
+        completion_tokens: Option<u32>,
+        tokens_per_second: Option<f64>,
+    ) -> Result<()> {
+        let timestamp = Utc::now().timestamp();
+
+        sqlx::query(
+            r#"
+            INSERT INTO metrics (timestamp, operation_type, duration_ms, success, error_type, char_count, completion_tokens, tokens_per_second)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(timestamp)
+        .bind(operation_type)
+        .bind(duration_ms)
+        .bind(success)
+        .bind(error_type)
+        .bind(char_count as i32)
+        .bind(completion_tokens.map(|t| t as i32))
+        .bind(tokens_per_second)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// 获取性能统计
     pub async fn get_performance_stats(&self, period: &str) -> Result<PerformanceStats> {
         let since = match period {
@@ -310,7 +378,9 @@ impl Database {
                 MAX(CASE WHEN success = 1 THEN duration_ms ELSE NULL END) as max_duration,
                 SUM(char_count) as total_chars,
                 SUM(CASE WHEN operation_type = 'selected' THEN 1 ELSE 0 END) as selected_count,
-                SUM(CASE WHEN operation_type = 'full' THEN 1 ELSE 0 END) as full_count
+                SUM(CASE WHEN operation_type = 'full' THEN 1 ELSE 0 END) as full_count,
+                SUM(COALESCE(completion_tokens, 0)) as total_tokens,
+                AVG(CASE WHEN tokens_per_second > 0 THEN tokens_per_second ELSE NULL END) as avg_tps
             FROM metrics
             WHERE timestamp > ?
             "#,
@@ -350,6 +420,8 @@ impl Database {
             total_chars_translated: stats_row.get::<Option<i64>, _>("total_chars").unwrap_or(0) as u64,
             selected_mode_count: stats_row.get::<i64, _>("selected_count") as u64,
             full_mode_count: stats_row.get::<i64, _>("full_count") as u64,
+            total_completion_tokens: stats_row.get::<Option<i64>, _>("total_tokens").unwrap_or(0) as u64,
+            avg_tokens_per_second: stats_row.get::<Option<f64>, _>("avg_tps").unwrap_or(0.0),
             error_distribution,
             hourly_data: Vec::new(), // TODO: 实现按小时统计
         })
@@ -386,6 +458,10 @@ pub struct PerformanceStats {
     pub full_mode_count: u64,
     pub error_distribution: Vec<ErrorDistribution>,
     pub hourly_data: Vec<HourlyData>,
+    /// 总 completion tokens
+    pub total_completion_tokens: u64,
+    /// 平均输出速率 (tokens/s)
+    pub avg_tokens_per_second: f64,
 }
 
 /// 错误分布
