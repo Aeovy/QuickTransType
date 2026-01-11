@@ -3,8 +3,7 @@
 
     export let languageConfig: LanguageConfig;
     export let historyLimit: number;
-    export let onUpdate: (currentTarget: string, favorites: Language[], historyLimit: number) => void;
-    export let onSave: () => void;
+    export let onUpdate: (currentTarget: string, favorites: Language[], historyLimit: number) => Promise<void>;
 
     let showAddDialog = false;
     let newLangCode = "";
@@ -31,10 +30,7 @@
 
     // 自动保存的辅助函数
     async function updateAndSave() {
-        onUpdate(languageConfig.current_target, languageConfig.favorite_languages, historyLimit);
-        // 延迟一点再保存，确保状态已更新
-        await new Promise(resolve => setTimeout(resolve, 50));
-        onSave();
+        await onUpdate(languageConfig.current_target, languageConfig.favorite_languages, historyLimit);
     }
 
     function handleTargetChange() {
@@ -152,7 +148,9 @@
         </select>
     </div>
 
-    <p class="auto-save-hint">💡 设置会自动保存</p>
+    <div class="button-row">
+        <p class="auto-save-hint">✨ 设置已自动保存</p>
+    </div>
 </div>
 
 <style>
@@ -179,11 +177,26 @@
         font-size: 0.8rem;
     }
 
+    .button-row {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 32px;
+        padding-top: 16px;
+        border-top: 1px solid #f1f5f9;
+    }
+
     .auto-save-hint {
-        text-align: center;
-        color: #6b7280;
-        font-size: 0.85rem;
-        margin-top: 20px;
+        color: #64748b;
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #f8fafc;
+        padding: 6px 14px;
+        border-radius: 20px;
+        border: 1px solid #e2e8f0;
     }
 
     select,

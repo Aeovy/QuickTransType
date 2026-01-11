@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { appState, type AppConfig, type LLMConfig, type Hotkey } from "./stores/appState";
-  import LLMSettings from "./settings/LLMSettings.svelte";
+  import Toast from "./components/Toast.svelte";
   import HotkeySettings from "./settings/HotkeySettings.svelte";
   import LanguageSettings from "./settings/LanguageSettings.svelte";
-  import Toast from "./components/Toast.svelte";
+  import LLMSettings from "./settings/LLMSettings.svelte";
+  import { appState, type AppConfig, type Hotkey, type LLMConfig } from "./stores/appState";
 
-  export let activeTab: "llm" | "hotkey" | "language";
+  let { activeTab }: { activeTab: "llm" | "hotkey" | "language" } = $props();
 
-  let toast: { message: string; type: "success" | "error" } | null = null;
+  let toast = $state<{ message: string; type: "success" | "error" } | null>(null);
 
-  let config: AppConfig | null = null;
+  let config = $state<AppConfig | null>(null);
   
   // 订阅状态变化
   appState.subscribe((state) => {
@@ -23,16 +23,6 @@
     }, 3000);
   }
 
-  async function handleSave() {
-    if (!config) return;
-    const result = await appState.saveConfig(config);
-    if (result.success) {
-      showToast("保存成功！", "success");
-    } else {
-      showToast(`保存失败: ${result.error}`, "error");
-    }
-  }
-
   async function handleTestConnection(llmConfig: LLMConfig) {
     const result = await appState.testLLMConnection(llmConfig);
     if (result.success) {
@@ -42,26 +32,32 @@
     }
   }
 
-  function updateLLMConfig(llmConfig: LLMConfig) {
+  async function updateLLMConfig(llmConfig: LLMConfig) {
     if (config) {
-      appState.updateConfig({ llm: llmConfig });
+      const updatedConfig = { ...config, llm: llmConfig };
+      await appState.saveConfig(updatedConfig);
     }
   }
 
-  function updateHotkeyConfig(selected: Hotkey, full: Hotkey) {
+  async function updateHotkeyConfig(selected: Hotkey, full: Hotkey) {
     if (config) {
-      appState.updateConfig({ 
+      const updatedConfig = { 
+        ...config,
         hotkey: { selected_mode: selected, full_mode: full } 
-      });
+      };
+      await appState.saveConfig(updatedConfig);
     }
   }
 
-  function updateLanguageConfig(currentTarget: string, favorites: { code: string; name: string }[], historyLimit: number) {
+  async function updateLanguageConfig(currentTarget: string, favorites: { code: string; name: string }[], historyLimit: number) {
     if (config) {
-      appState.updateConfig({
+      const updatedConfig = {
+        ...config,
         language: { current_target: currentTarget, favorite_languages: favorites },
         history_limit: historyLimit,
-      });
+      };
+      // 直接保存最新配置
+      await appState.saveConfig(updatedConfig);
     }
   }
 </script>
@@ -76,20 +72,17 @@
       llmConfig={config.llm} 
       onUpdate={updateLLMConfig}
       onTestConnection={handleTestConnection}
-      onSave={handleSave}
     />
   {:else if activeTab === "hotkey"}
     <HotkeySettings 
       hotkeyConfig={config.hotkey}
       onUpdate={updateHotkeyConfig}
-      onSave={handleSave}
     />
   {:else if activeTab === "language"}
     <LanguageSettings 
       languageConfig={config.language}
       historyLimit={config.history_limit}
       onUpdate={updateLanguageConfig}
-      onSave={handleSave}
     />
   {/if}
 {:else}

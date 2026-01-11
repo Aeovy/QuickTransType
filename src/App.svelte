@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { onDestroy, onMount } from "svelte";
   import History from "./lib/History.svelte";
   import Performance from "./lib/Performance.svelte";
   import Settings from "./lib/Settings.svelte";
@@ -9,22 +10,43 @@
   
   let config = $derived($appState.config);
   let favoriteLanguages = $derived(config?.language.favorite_languages ?? []);
-  let currentTarget = $derived(config?.language.current_target ?? "en-US");
+  let currentTarget = $state("en-US");
+  let unlistenConfigUpdate: UnlistenFn | null = null;
+
+  // 同步currentTarget与config的变化
+  $effect(() => {
+    if (config?.language.current_target) {
+      currentTarget = config.language.current_target;
+    }
+  });
 
   async function handleTargetLanguageChange(event: Event) {
     const select = event.target as HTMLSelectElement;
     const newTarget = select.value;
-    if (config) {
-      appState.updateConfig({
-        language: { ...config.language, current_target: newTarget }
-      });
-      // 自动保存
-      await appState.saveConfig({ ...config, language: { ...config.language, current_target: newTarget } });
+    console.log("顶部栏切换语言:", newTarget);
+    if (config && newTarget !== config.language.current_target) {
+      const updatedConfig = { 
+        ...config, 
+        language: { ...config.language, current_target: newTarget } 
+      };
+      await appState.saveConfig(updatedConfig);
     }
   }
 
   onMount(async () => {
     await appState.loadConfig();
+    
+    // 监听配置更新事件（从托盘菜单或其他地方触发）
+    unlistenConfigUpdate = await listen("config-updated", async () => {
+      console.log("Config updated, reloading...");
+      await appState.loadConfig();
+    });
+  });
+
+  onDestroy(() => {
+    if (unlistenConfigUpdate) {
+      unlistenConfigUpdate();
+    }
   });
 </script>
 
@@ -40,7 +62,7 @@
           <span class="selector-label">目标语言:</span>
           <select value={currentTarget} onchange={handleTargetLanguageChange}>
             {#each favoriteLanguages as lang}
-              <option value={lang.code}>{lang.name}</option>
+              <option value={lang.code} selected={lang.code === currentTarget}>{lang.name}</option>
             {/each}
           </select>
         </label>

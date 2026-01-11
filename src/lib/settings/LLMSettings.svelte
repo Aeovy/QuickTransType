@@ -2,23 +2,18 @@
   import type { LLMConfig } from "../stores/appState";
 
   export let llmConfig: LLMConfig;
-  export let onUpdate: (config: LLMConfig) => void;
+  export let onUpdate: (config: LLMConfig) => Promise<void>;
   export let onTestConnection: (config: LLMConfig) => void;
-  export let onSave: () => void;
 
   let showApiKey = false;
   let isTesting = false;
 
   const predefinedModels = [
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4-turbo",
-    "gpt-4",
-    "gpt-3.5-turbo",
+    "hy-mt1.5-1.8b"
   ];
 
-  function handleChange() {
-    onUpdate(llmConfig);
+  async function handleChange() {
+    await onUpdate(llmConfig);
   }
 
   async function handleTestConnection() {
@@ -176,9 +171,7 @@
     <button class="btn secondary" onclick={handleTestConnection} disabled={isTesting}>
       {isTesting ? "测试中..." : "测试连接"}
     </button>
-    <button class="btn primary" onclick={onSave}>
-      保存设置
-    </button>
+    <p class="auto-save-hint">✨ 设置已自动保存</p>
   </div>
 </div>
 
@@ -265,13 +258,6 @@
     font-size: 0.8rem;
   }
 
-  .button-row {
-    display: flex;
-    gap: 15px;
-    justify-content: flex-end;
-    margin-top: 25px;
-  }
-
   .btn {
     padding: 12px 25px;
     border: none;
@@ -280,15 +266,6 @@
     font-size: 0.95rem;
     font-weight: 500;
     transition: all 0.2s;
-  }
-
-  .btn.primary {
-    background: #2563eb;
-    color: #ffffff;
-  }
-
-  .btn.primary:hover {
-    background: #1d4ed8;
   }
 
   .btn.secondary {
@@ -315,30 +292,30 @@
   .toggle-option {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 12px 15px;
-    background: #f9fafb;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
+    gap: 14px;
+    padding: 16px;
+    background: #ffffff;
+    border: 2px solid #f1f5f9;
+    border-radius: 12px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .toggle-option:hover {
-    border-color: #00d4ff;
-    background: rgba(0, 212, 255, 0.05);
+    border-color: #e2e8f0;
+    background: #f8fafc;
   }
 
   .toggle-option:has(input:checked) {
-    border-color: #00d4ff;
-    background: rgba(0, 212, 255, 0.1);
+    border-color: #3b82f6;
+    background: #eff6ff;
   }
 
   .toggle-option input[type="radio"] {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     margin-top: 2px;
-    accent-color: #00d4ff;
+    accent-color: #3b82f6;
   }
 
   .toggle-label {
@@ -348,13 +325,37 @@
   }
 
   .toggle-title {
-    color: #eaeaea;
+    color: #1f2937;
     font-size: 0.95rem;
-    font-weight: 500;
+    font-weight: 600;
   }
 
   .toggle-desc {
-    color: #888;
-    font-size: 0.8rem;
+    color: #6b7280;
+    font-size: 0.85rem;
+  }
+
+  .button-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 16px;
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .auto-save-hint {
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f8fafc;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
   }
 </style>

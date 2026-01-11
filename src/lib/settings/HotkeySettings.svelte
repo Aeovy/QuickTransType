@@ -3,8 +3,7 @@
   import type { Hotkey, HotkeyConfig } from "../stores/appState";
 
   export let hotkeyConfig: HotkeyConfig;
-  export let onUpdate: (selected: Hotkey, full: Hotkey) => void;
-  export let onSave: () => void;
+  export let onUpdate: (selected: Hotkey, full: Hotkey) => Promise<void>;
 
   let selectedRecording = false;
   let fullRecording = false;
@@ -186,7 +185,7 @@
   {/if}
 
   <div class="button-row">
-    <button class="btn primary" onclick={onSave}>保存设置</button>
+    <p class="auto-save-hint">✨ 设置已自动保存</p>
   </div>
 </div>
 
@@ -293,25 +292,22 @@
   .button-row {
     display: flex;
     justify-content: flex-end;
-    margin-top: 25px;
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid #f1f5f9;
   }
 
-  .btn {
-    padding: 12px 25px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.95rem;
+  .auto-save-hint {
+    color: #64748b;
+    font-size: 0.75rem;
     font-weight: 500;
-    transition: all 0.2s;
-  }
-
-  .btn.primary {
-    background: #2563eb;
-    color: #ffffff;
-  }
-
-  .btn.primary:hover {
-    background: #1d4ed8;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f8fafc;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
   }
 </style>

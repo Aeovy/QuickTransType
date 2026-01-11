@@ -17,10 +17,52 @@ use config::Hotkey;
 use key_listener::{ConsecutiveKeyConfig, KeyListener};
 use state::AppState;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+/// 构建托盘菜单
+pub(crate) async fn build_tray_menu(
+    app: &tauri::AppHandle,
+    state: &Arc<AppState>,
+) -> Result<tauri::menu::Menu<tauri::Wry>, Box<dyn std::error::Error>> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+
+    let config = state.config.read().await;
+    let current_target = config.language.current_target.clone();
+    
+    // 构建语言子菜单
+    let mut lang_submenu = SubmenuBuilder::new(app, "切换目标语言");
+    for lang in &config.language.favorite_languages {
+        let is_current = lang.code == current_target;
+        let label = if is_current {
+            format!("✓ {}", lang.name)
+        } else {
+            lang.name.clone()
+        };
+        let item = MenuItemBuilder::with_id(&format!("lang_{}", lang.code), label)
+            .build(app)?;
+        lang_submenu = lang_submenu.item(&item);
+    }
+    let lang_menu = lang_submenu.build()?;
+
+    let toggle = MenuItemBuilder::with_id("toggle", "启用/暂停").build(app)?;
+    let settings = MenuItemBuilder::with_id("settings", "打开设置").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+
+    let menu = MenuBuilder::new(app)
+        .item(&lang_menu)
+        .separator()
+        .item(&toggle)
+        .separator()
+        .item(&settings)
+        .separator()
+        .item(&quit)
+        .build()?;
+
+    Ok(menu)
+}
 
 /// 检查 macOS 辅助功能权限
 #[cfg(target_os = "macos")]
@@ -435,44 +477,16 @@ pub fn run() {
             // 设置系统托盘
             #[cfg(desktop)]
             {
-                use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
                 use tauri::tray::TrayIconBuilder;
 
-                // 获取配置中的语言列表（使用同步读取）
-                let config = state.config.blocking_read();
-                let current_target = config.language.current_target.clone();
-                
-                // 构建语言子菜单
-                let mut lang_submenu = SubmenuBuilder::new(app, "切换目标语言");
-                for lang in &config.language.favorite_languages {
-                    let is_current = lang.code == current_target;
-                    let label = if is_current {
-                        format!("✓ {}", lang.name)
-                    } else {
-                        lang.name.clone()
-                    };
-                    let item = MenuItemBuilder::with_id(&format!("lang_{}", lang.code), label)
-                        .build(app)?;
-                    lang_submenu = lang_submenu.item(&item);
-                }
-                let lang_menu = lang_submenu.build()?;
-
-                let toggle = MenuItemBuilder::with_id("toggle", "启用/暂停").build(app)?;
-                let settings = MenuItemBuilder::with_id("settings", "打开设置").build(app)?;
-                let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
-
-                let menu = MenuBuilder::new(app)
-                    .item(&lang_menu)
-                    .separator()
-                    .item(&toggle)
-                    .separator()
-                    .item(&settings)
-                    .separator()
-                    .item(&quit)
-                    .build()?;
+                // 构建菜单
+                let menu = tauri::async_runtime::block_on(async {
+                    build_tray_menu(&app.handle(), &state).await
+                })?;
 
                 let app_state = state.clone();
-                let _tray = TrayIconBuilder::new()
+                let app_handle = app.handle().clone();
+                let _tray = TrayIconBuilder::with_id("main")
                     .icon(app.default_window_icon().cloned().expect("no icon"))
                     .menu(&menu)
                     .show_menu_on_left_click(false)
@@ -484,11 +498,29 @@ pub fn run() {
                             info!("Switching language to: {}", lang_code);
                             let state = app_state.clone();
                             let lang = lang_code.to_string();
+                            let app_handle_clone = app_handle.clone();
                             tauri::async_runtime::spawn(async move {
                                 let mut config = state.get_config().await;
-                                config.language.current_target = lang;
+                                config.language.current_target = lang.clone();
                                 if let Err(e) = state.save_config(&config).await {
                                     error!("Failed to save language config: {}", e);
+                                    return;
+                                }
+                                
+                                // 重新构建托盘菜单
+                                if let Ok(new_menu) = build_tray_menu(&app_handle_clone, &state).await {
+                                    if let Some(tray) = app_handle_clone.tray_by_id("main") {
+                                        if let Err(e) = tray.set_menu(Some(new_menu)) {
+                                            error!("Failed to update tray menu: {}", e);
+                                        } else {
+                                            info!("Tray menu updated for language: {}", lang);
+                                        }
+                                    }
+                                }
+                                
+                                // 发送配置更新事件通知前端
+                                if let Err(e) = app_handle_clone.emit("config-updated", ()) {
+                                    error!("Failed to emit config-updated event: {}", e);
                                 }
                             });
                             return;

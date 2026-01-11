@@ -8,6 +8,7 @@ use crate::llm::LLMClient;
 use crate::state::AppState;
 use std::sync::Arc;
 use std::time::Instant;
+use tauri::Emitter;
 use tauri::State;
 use tracing::{debug, error, info};
 
@@ -23,6 +24,7 @@ pub async fn get_config(state: State<'_, Arc<AppState>>) -> Result<AppConfig, St
 pub async fn save_config(
     config: AppConfig,
     state: State<'_, Arc<AppState>>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     info!("Saving config");
     state
@@ -39,6 +41,25 @@ pub async fn save_config(
             error!("Failed to cleanup history: {}", e);
             e.to_string()
         })?;
+
+    // 更新托盘菜单
+    #[cfg(desktop)]
+    {
+        if let Ok(new_menu) = crate::build_tray_menu(&app, &state).await {
+            if let Some(tray) = app.tray_by_id("main") {
+                if let Err(e) = tray.set_menu(Some(new_menu)) {
+                    error!("Failed to update tray menu: {}", e);
+                } else {
+                    info!("Tray menu updated after config save");
+                }
+            }
+        }
+    }
+    
+    // 发送配置更新事件通知前端
+    if let Err(e) = app.emit("config-updated", ()) {
+        error!("Failed to emit config-updated event: {}", e);
+    }
 
     Ok(())
 }
