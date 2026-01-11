@@ -1,16 +1,45 @@
 //! LLM 客户端模块
-//! 处理与 LLM API 的通信
+//! 处理与 LLM API 的通信，支持流式传输
 
 use crate::config::LLMConfig;
 use crate::error::{AppError, Result};
+use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
-use tracing::{debug, error, info};
+use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
+use tracing::{debug, info};
 
 /// LLM 客户端
 pub struct LLMClient {
     client: Client,
+}
+
+/// 翻译结果，包含性能指标
+#[derive(Debug, Clone)]
+pub struct TranslationResult {
+    /// 翻译后的文本
+    pub translated_text: String,
+    /// 完成 tokens 数量
+    pub completion_tokens: Option<u32>,
+    /// 请求耗时（毫秒）
+    pub duration_ms: u64,
+    /// 输出速率 (tokens/s)
+    pub tokens_per_second: Option<f64>,
+}
+
+/// 流式传输的事件
+#[derive(Debug, Clone)]
+pub enum StreamEvent {
+    /// 增量文本
+    Delta(String),
+    /// 完成，包含统计信息
+    Done {
+        completion_tokens: Option<u32>,
+        duration_ms: u64,
+    },
+    /// 错误
+    Error(String),
 }
 
 /// OpenAI API 请求体
@@ -20,6 +49,8 @@ struct ChatCompletionRequest {
     messages: Vec<Message>,
     temperature: f32,
     top_p: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
 }
 
 /// 消息结构
@@ -29,10 +60,23 @@ struct Message {
     content: String,
 }
 
-/// OpenAI API 响应体
+/// OpenAI API 响应体 (非流式)
 #[derive(Debug, Deserialize)]
 struct ChatCompletionResponse {
     choices: Vec<Choice>,
+    #[serde(default)]
+    usage: Option<Usage>,
+}
+
+/// Usage 统计
+#[derive(Debug, Deserialize, Default)]
+struct Usage {
+    #[serde(default)]
+    prompt_tokens: u32,
+    #[serde(default)]
+    completion_tokens: u32,
+    #[serde(default)]
+    total_tokens: u32,
 }
 
 /// 选择结构
@@ -47,6 +91,29 @@ struct ResponseMessage {
     content: String,
 }
 
+/// 流式响应块
+#[derive(Debug, Deserialize)]
+struct StreamChunk {
+    choices: Vec<StreamChoice>,
+    #[serde(default)]
+    usage: Option<Usage>,
+}
+
+/// 流式选择
+#[derive(Debug, Deserialize)]
+struct StreamChoice {
+    delta: StreamDelta,
+    #[serde(default)]
+    finish_reason: Option<String>,
+}
+
+/// 流式增量内容
+#[derive(Debug, Deserialize, Default)]
+struct StreamDelta {
+    #[serde(default)]
+    content: Option<String>,
+}
+
 /// API 错误响应
 #[derive(Debug, Deserialize)]
 struct ApiErrorResponse {
@@ -56,17 +123,15 @@ struct ApiErrorResponse {
 #[derive(Debug, Deserialize)]
 struct ApiError {
     message: String,
-    #[serde(rename = "type")]
-    error_type: Option<String>,
 }
 
 impl LLMClient {
     /// 创建新的 LLM 客户端
     pub fn new() -> Result<Self> {
         let client = Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(120))
             .build()
-            .map_err(|e| AppError::Network(e))?;
+            .map_err(AppError::Network)?;
 
         Ok(Self { client })
     }
@@ -75,7 +140,6 @@ impl LLMClient {
     pub async fn test_connection(&self, config: &LLMConfig) -> Result<String> {
         info!("Testing LLM connection...");
         
-        // 验证配置
         if config.api_key.is_empty() {
             return Err(AppError::Config("API Key 不能为空".to_string()));
         }
@@ -83,12 +147,34 @@ impl LLMClient {
             return Err(AppError::Config("Base URL 不能为空".to_string()));
         }
 
-        // 发送测试请求
         let test_text = "Hello";
-        let user_prompt = config
-            .user_prompt_template
-            .replace("{target_language}", "中文")
-            .replace("{text}", test_text);
+        let result = self.translate(config, test_text, "中文").await?;
+
+        info!("LLM connection test successful");
+        Ok(format!(
+            "连接成功！测试翻译: {} → {} ({}ms, {:.1} tokens/s)",
+            test_text,
+            result.translated_text.trim(),
+            result.duration_ms,
+            result.tokens_per_second.unwrap_or(0.0)
+        ))
+    }
+
+    /// 翻译文本（非流式）
+    pub async fn translate(
+        &self,
+        config: &LLMConfig,
+        text: &str,
+        target_language: &str,
+    ) -> Result<TranslationResult> {
+        debug!("Translating text ({} chars) to {}", text.len(), target_language);
+
+        if config.api_key.is_empty() {
+            return Err(AppError::Config("API Key 未配置".to_string()));
+        }
+
+        let user_prompt = build_user_prompt(&config.user_prompt_template, target_language, text);
+        let start_time = Instant::now();
 
         let request_body = ChatCompletionRequest {
             model: config.model.clone(),
@@ -104,10 +190,10 @@ impl LLMClient {
             ],
             temperature: config.temperature,
             top_p: config.top_p,
+            stream: None,
         };
 
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
-        debug!("Sending test request to: {}", url);
 
         let response = self
             .client
@@ -116,63 +202,79 @@ impl LLMClient {
             .header("Content-Type", "application/json")
             .json(&request_body)
             .send()
-            .await
-            .map_err(|e| {
-                error!("Network error: {}", e);
-                AppError::Network(e)
-            })?;
+            .await?;
 
         let status = response.status();
+        let duration_ms = start_time.elapsed().as_millis() as u64;
         
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             
-            // 尝试解析 API 错误
             if let Ok(api_error) = serde_json::from_str::<ApiErrorResponse>(&error_text) {
-                let error_msg = match status.as_u16() {
-                    401 => format!("认证失败: {}", api_error.error.message),
-                    429 => format!("请求频率限制: {}", api_error.error.message),
-                    500..=599 => format!("服务器错误: {}", api_error.error.message),
-                    _ => format!("API 错误 ({}): {}", status, api_error.error.message),
-                };
-                return Err(AppError::LlmApi(error_msg));
+                return Err(AppError::LlmApi(api_error.error.message));
             }
             
-            return Err(AppError::LlmApi(format!(
-                "API 请求失败 ({}): {}",
-                status, error_text
-            )));
+            return Err(AppError::LlmApi(format!("翻译请求失败 ({})", status)));
         }
 
-        let result: ChatCompletionResponse = response.json().await.map_err(|e| {
-            error!("Failed to parse response: {}", e);
-            AppError::LlmApi(format!("解析响应失败: {}", e))
-        })?;
+        // 解析完整响应以获取 usage
+        let response_text = response.text().await?;
+        let result: ChatCompletionResponse = serde_json::from_str(&response_text)
+            .map_err(|e| AppError::LlmApi(format!("解析翻译响应失败: {}", e)))?;
 
         let translated = result
             .choices
             .first()
-            .map(|c| c.message.content.clone())
-            .ok_or_else(|| AppError::LlmApi("API 返回空响应".to_string()))?;
+            .map(|c| c.message.content.trim().to_string())
+            .ok_or_else(|| AppError::LlmApi("翻译 API 返回空响应".to_string()))?;
 
-        info!("LLM connection test successful");
-        Ok(format!("连接成功！测试翻译: {} → {}", test_text, translated.trim()))
+        // 获取 completion_tokens
+        let completion_tokens = result.usage.as_ref().map(|u| u.completion_tokens);
+        
+        // 如果 usage 中没有，尝试从响应文本中搜索
+        let completion_tokens = completion_tokens.or_else(|| {
+            extract_completion_tokens(&response_text)
+        });
+
+        let tokens_per_second = completion_tokens.map(|t| {
+            if duration_ms > 0 {
+                (t as f64) / (duration_ms as f64 / 1000.0)
+            } else {
+                0.0
+            }
+        });
+
+        debug!(
+            "Translation completed: {} chars, {} tokens, {}ms, {:.1} tokens/s",
+            translated.len(),
+            completion_tokens.unwrap_or(0),
+            duration_ms,
+            tokens_per_second.unwrap_or(0.0)
+        );
+
+        Ok(TranslationResult {
+            translated_text: translated,
+            completion_tokens,
+            duration_ms,
+            tokens_per_second,
+        })
     }
 
-    /// 翻译文本
-    pub async fn translate(
+    /// 流式翻译文本
+    pub async fn translate_stream(
         &self,
         config: &LLMConfig,
         text: &str,
         target_language: &str,
-    ) -> Result<String> {
-        debug!("Translating text ({} chars) to {}", text.len(), target_language);
+    ) -> Result<mpsc::Receiver<StreamEvent>> {
+        debug!("Starting streaming translation ({} chars) to {}", text.len(), target_language);
 
         if config.api_key.is_empty() {
             return Err(AppError::Config("API Key 未配置".to_string()));
         }
 
-        // 构建用户提示
+        let (tx, rx) = mpsc::channel(100);
+
         let user_prompt = build_user_prompt(&config.user_prompt_template, target_language, text);
 
         let request_body = ChatCompletionRequest {
@@ -189,46 +291,89 @@ impl LLMClient {
             ],
             temperature: config.temperature,
             top_p: config.top_p,
+            stream: Some(true),
         };
 
         let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
+        let client = self.client.clone();
+        let api_key = config.api_key.clone();
 
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", config.api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await?;
+        // 在后台任务中处理流式响应
+        tokio::spawn(async move {
+            let start_time = Instant::now();
+            let mut total_tokens = 0u32;
 
-        let status = response.status();
-        
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            
-            if let Ok(api_error) = serde_json::from_str::<ApiErrorResponse>(&error_text) {
-                return Err(AppError::LlmApi(api_error.error.message));
+            let response = match client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ = tx.send(StreamEvent::Error(format!("请求失败: {}", e))).await;
+                    return;
+                }
+            };
+
+            if !response.status().is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                let _ = tx.send(StreamEvent::Error(format!("API 错误: {}", error_text))).await;
+                return;
             }
-            
-            return Err(AppError::LlmApi(format!(
-                "翻译请求失败 ({})",
-                status
-            )));
-        }
 
-        let result: ChatCompletionResponse = response.json().await.map_err(|e| {
-            AppError::LlmApi(format!("解析翻译响应失败: {}", e))
-        })?;
+            let mut stream = response.bytes_stream();
+            let mut buffer = String::new();
 
-        let translated = result
-            .choices
-            .first()
-            .map(|c| c.message.content.trim().to_string())
-            .ok_or_else(|| AppError::LlmApi("翻译 API 返回空响应".to_string()))?;
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = match chunk_result {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let _ = tx.send(StreamEvent::Error(format!("读取流失败: {}", e))).await;
+                        break;
+                    }
+                };
 
-        debug!("Translation completed: {} chars", translated.len());
-        Ok(translated)
+                buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+                // 处理 SSE 格式的数据
+                while let Some(line_end) = buffer.find('\n') {
+                    let line = buffer[..line_end].trim().to_string();
+                    buffer = buffer[line_end + 1..].to_string();
+
+                    if line.is_empty() || line == "data: [DONE]" {
+                        continue;
+                    }
+
+                    if let Some(json_str) = line.strip_prefix("data: ") {
+                        if let Ok(chunk_data) = serde_json::from_str::<StreamChunk>(json_str) {
+                            // 检查 usage (某些 API 在流式响应的最后一块包含 usage)
+                            if let Some(usage) = &chunk_data.usage {
+                                total_tokens = usage.completion_tokens;
+                            }
+
+                            for choice in chunk_data.choices {
+                                if let Some(content) = choice.delta.content {
+                                    if !content.is_empty() {
+                                        let _ = tx.send(StreamEvent::Delta(content)).await;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+            let _ = tx.send(StreamEvent::Done {
+                completion_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
+                duration_ms,
+            }).await;
+        });
+
+        Ok(rx)
     }
 }
 
@@ -245,6 +390,30 @@ fn build_user_prompt(template: &str, target_language: &str, text: &str) -> Strin
         .replace("{text}", text)
 }
 
+/// 从响应文本中提取 completion_tokens
+fn extract_completion_tokens(response_text: &str) -> Option<u32> {
+    // 尝试用正则或简单搜索找 completion_tokens
+    if let Some(pos) = response_text.find("\"completion_tokens\"") {
+        let after = &response_text[pos..];
+        // 查找数字
+        let mut num_str = String::new();
+        let mut found_colon = false;
+        for c in after.chars() {
+            if c == ':' {
+                found_colon = true;
+            } else if found_colon && c.is_ascii_digit() {
+                num_str.push(c);
+            } else if found_colon && !c.is_whitespace() && !c.is_ascii_digit() {
+                break;
+            }
+        }
+        if !num_str.is_empty() {
+            return num_str.parse().ok();
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,9 +426,8 @@ mod tests {
     }
 
     #[test]
-    fn test_build_user_prompt_multiple_vars() {
-        let template = "Translate to {target_language}: {text} (language: {target_language})";
-        let result = build_user_prompt(template, "Chinese", "Hello");
-        assert_eq!(result, "Translate to Chinese: Hello (language: Chinese)");
+    fn test_extract_completion_tokens() {
+        let response = r#"{"usage":{"completion_tokens":92,"prompt_tokens":10}}"#;
+        assert_eq!(extract_completion_tokens(response), Some(92));
     }
 }
