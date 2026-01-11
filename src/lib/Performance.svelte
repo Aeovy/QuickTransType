@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { onDestroy, onMount } from "svelte";
 
   interface PerformanceStats {
     total_translations: number;
@@ -12,6 +13,8 @@
     total_chars_translated: number;
     selected_mode_count: number;
     full_mode_count: number;
+    total_completion_tokens: number;
+    avg_tokens_per_second: number;
     error_distribution: Array<{ error_type: string; count: number }>;
     hourly_data: Array<{ hour: number; avg_duration: number; count: number }>;
   }
@@ -20,15 +23,25 @@
   let period: "hour" | "day" | "week" = "day";
   let isLoading = false;
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
+  let unlistenHistoryCleared: UnlistenFn | null = null;
 
-  onMount(() => {
+  onMount(async () => {
     loadStats();
     refreshInterval = setInterval(loadStats, 30000); // 每30秒刷新
+    
+    // 监听历史清空事件
+    unlistenHistoryCleared = await listen("history-cleared", () => {
+      console.log("History cleared, refreshing performance stats");
+      loadStats();
+    });
   });
 
   onDestroy(() => {
     if (refreshInterval) {
       clearInterval(refreshInterval);
+    }
+    if (unlistenHistoryCleared) {
+      unlistenHistoryCleared();
     }
   });
 
@@ -83,7 +96,7 @@
         type="radio"
         bind:group={period}
         value="hour"
-        on:change={handlePeriodChange}
+        onchange={handlePeriodChange}
       />
       最近 1 小时
     </label>
@@ -92,7 +105,7 @@
         type="radio"
         bind:group={period}
         value="day"
-        on:change={handlePeriodChange}
+        onchange={handlePeriodChange}
       />
       最近 24 小时
     </label>
@@ -101,11 +114,11 @@
         type="radio"
         bind:group={period}
         value="week"
-        on:change={handlePeriodChange}
+        onchange={handlePeriodChange}
       />
       最近 7 天
     </label>
-    <button class="refresh-btn" on:click={loadStats} disabled={isLoading}>
+    <button class="refresh-btn" onclick={loadStats} disabled={isLoading}>
       {isLoading ? "刷新中..." : "🔄 刷新"}
     </button>
   </div>
@@ -141,8 +154,16 @@
         <p class="stat-value">{formatDuration(stats.avg_duration_ms)}</p>
       </div>
       <div class="stat-card">
+        <h3>平均输出速度</h3>
+        <p class="stat-value">{stats.avg_tokens_per_second.toFixed(1)} <span class="unit">tokens/s</span></p>
+      </div>
+      <div class="stat-card">
         <h3>总字符数</h3>
         <p class="stat-value">{stats.total_chars_translated.toLocaleString()}</p>
+      </div>
+      <div class="stat-card">
+        <h3>总 Token 数</h3>
+        <p class="stat-value">{stats.total_completion_tokens.toLocaleString()}</p>
       </div>
     </div>
 
@@ -326,6 +347,19 @@
     font-size: 1.8rem;
     font-weight: 600;
     color: #00d4ff;
+  }
+
+  .stat-value .unit {
+    font-size: 0.9rem;
+    font-weight: normal;
+    color: #888;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 25px;
   }
 
   .charts-grid {
