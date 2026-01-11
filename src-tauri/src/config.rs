@@ -76,12 +76,14 @@ impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
             selected_mode: Hotkey::Combination {
-                modifiers: vec!["Meta".to_string()],
-                key: "t".to_string(),
+                modifiers: vec!["Control".to_string()],
+                key: "k".to_string(),
             },
-            full_mode: Hotkey::Consecutive {
-                key: " ".to_string(),
-                count: 3,
+            // 默认使用组合键，避免 rdev 输入监控权限问题
+            // 可以改为 Consecutive { key: " ", count: 3 } 启用连续空格触发
+            full_mode: Hotkey::Combination {
+                modifiers: vec!["Control".to_string()],
+                key: "j".to_string(),
             },
         }
     }

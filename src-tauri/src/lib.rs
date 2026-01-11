@@ -6,6 +6,7 @@ pub mod config;
 pub mod database;
 pub mod error;
 pub mod hotkey;
+pub mod key_listener;
 pub mod llm;
 pub mod text_handler;
 
@@ -13,6 +14,7 @@ mod commands;
 mod state;
 
 use config::Hotkey;
+use key_listener::{ConsecutiveKeyConfig, KeyListener};
 use state::AppState;
 use std::sync::Arc;
 use tauri::Manager;
@@ -175,29 +177,71 @@ fn register_global_shortcuts(app: &tauri::App, state: &Arc<AppState>) -> Result<
         info!("Registered selected mode hotkey: {:?}", config.hotkey.selected_mode);
     }
 
-    // 注册全文翻译热键（如果是组合键）
-    if let Some(shortcut) = hotkey_to_shortcut(&config.hotkey.full_mode) {
-        let app_handle = app.handle().clone();
-        
-        app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                debug!("Full mode hotkey triggered");
-                let handle = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = trigger_translation(&handle, "full").await {
-                        error!("Translation failed: {}", e);
+    // 注册全文翻译热键
+    match &config.hotkey.full_mode {
+        Hotkey::Combination { .. } => {
+            // 组合键模式
+            if let Some(shortcut) = hotkey_to_shortcut(&config.hotkey.full_mode) {
+                let app_handle = app.handle().clone();
+                
+                app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        debug!("Full mode hotkey triggered");
+                        let handle = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = trigger_translation(&handle, "full").await {
+                                error!("Translation failed: {}", e);
+                            }
+                        });
                     }
-                });
+                })?;
+                
+                info!("Registered full mode hotkey: {:?}", config.hotkey.full_mode);
             }
-        })?;
-        
-        info!("Registered full mode hotkey: {:?}", config.hotkey.full_mode);
+        }
+        Hotkey::Consecutive { key, count } => {
+            // 连续按键模式 - 使用 rdev 监听器
+            let app_handle = app.handle().clone();
+            let key_config = ConsecutiveKeyConfig {
+                key: key.clone(),
+                count: *count,
+                interval_ms: 300,
+            };
+            
+            start_consecutive_key_listener(app_handle, key_config);
+            info!("Registered full mode consecutive key: '{}' x {}", key, count);
+        }
     }
 
     Ok(())
 }
 
-/// 触发翻译
+/// 启动连续按键监听器
+fn start_consecutive_key_listener(app_handle: tauri::AppHandle, config: ConsecutiveKeyConfig) {
+    std::thread::spawn(move || {
+        let mut listener = KeyListener::new();
+        let mut rx = listener.start(config);
+        
+        // 使用 tokio 运行时处理接收到的触发信号
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime");
+        
+        rt.block_on(async {
+            while let Some(()) = rx.recv().await {
+                debug!("Consecutive key trigger received");
+                let handle = app_handle.clone();
+                
+                if let Err(e) = trigger_translation(&handle, "full").await {
+                    error!("Full translation failed: {}", e);
+                }
+            }
+        });
+    });
+}
+
+/// 触发翻译（流式传输版本）
 async fn trigger_translation(app: &tauri::AppHandle, mode: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Triggering {} translation", mode);
     
@@ -207,12 +251,22 @@ async fn trigger_translation(app: &tauri::AppHandle, mode: &str) -> Result<(), B
     // 获取文本
     let text = if mode == "selected" {
         // 选中翻译：复制当前选中的文本
-        state.text_handler.translate_selected().await
-            .map_err(|e| format!("Failed to get selected text: {}", e))?
+        match state.text_handler.translate_selected().await {
+            Ok(t) => t,
+            Err(e) => {
+                warn!("Failed to get selected text: {}", e);
+                return Ok(()); // 静默失败，不做任何操作
+            }
+        }
     } else {
         // 全文翻译：选中全部并复制
-        state.text_handler.translate_full().await
-            .map_err(|e| format!("Failed to get full text: {}", e))?
+        match state.text_handler.translate_full().await {
+            Ok(t) => t,
+            Err(e) => {
+                warn!("Failed to get full text: {}", e);
+                return Ok(()); // 静默失败，不做任何操作
+            }
+        }
     };
     
     if text.is_empty() {
@@ -220,20 +274,94 @@ async fn trigger_translation(app: &tauri::AppHandle, mode: &str) -> Result<(), B
         return Ok(());
     }
     
-    info!("Translating {} characters", text.len());
+    let original_text = text.clone();
+    let char_count = text.len();
+    info!("Translating {} characters", char_count);
     
-    // 调用 LLM 翻译
     let llm_client = state.get_llm_client().await;
-    let target_lang = &config.language.current_target;
+    let target_lang = config.language.current_target.clone();
     
-    let result = llm_client.translate(&config.llm, &text, target_lang).await
+    // 删除选中的文本，准备流式输入
+    state.text_handler.delete_selection().await
+        .map_err(|e| format!("Failed to delete selection: {}", e))?;
+    
+    // 使用流式传输
+    let mut stream = llm_client.translate_stream(&config.llm, &text, &target_lang).await
         .map_err(|e| format!("Translation API error: {}", e))?;
     
-    // 粘贴翻译结果
-    state.text_handler.paste(&result).await
-        .map_err(|e| format!("Failed to paste result: {}", e))?;
+    let mut translated_text = String::new();
+    let mut completion_tokens: Option<u32> = None;
+    let mut duration_ms: u64 = 0;
     
-    info!("Translation completed");
+    // 处理流式响应
+    use crate::llm::StreamEvent;
+    while let Some(event) = stream.recv().await {
+        match event {
+            StreamEvent::Delta(delta) => {
+                // 流式输入每个增量文本
+                if let Err(e) = state.text_handler.type_chunk(&delta).await {
+                    error!("Failed to type chunk: {}", e);
+                }
+                translated_text.push_str(&delta);
+            }
+            StreamEvent::Done { completion_tokens: tokens, duration_ms: dur } => {
+                completion_tokens = tokens;
+                duration_ms = dur;
+                debug!("Stream completed: {} tokens, {}ms", tokens.unwrap_or(0), dur);
+            }
+            StreamEvent::Error(err) => {
+                error!("Stream error: {}", err);
+                // 发生错误时，尝试恢复原文
+                if let Some(backup) = state.text_handler.get_backup().await {
+                    state.text_handler.paste(&backup).await.ok();
+                }
+                return Err(err.into());
+            }
+        }
+    }
+    
+    // 计算性能指标
+    let tokens_per_second = completion_tokens.map(|t| {
+        if duration_ms > 0 {
+            (t as f64) / (duration_ms as f64 / 1000.0)
+        } else {
+            0.0
+        }
+    });
+    
+    info!(
+        "Translation completed: {} chars -> {} chars, {} tokens, {}ms, {:.1} tokens/s",
+        original_text.len(),
+        translated_text.len(),
+        completion_tokens.unwrap_or(0),
+        duration_ms,
+        tokens_per_second.unwrap_or(0.0)
+    );
+    
+    // 保存翻译历史
+    if let Err(e) = state.database.insert_translation(
+        &original_text,
+        &translated_text,
+        None, // source_lang 自动检测
+        &target_lang,
+        mode,
+    ).await {
+        error!("Failed to save translation history: {}", e);
+    }
+    
+    // 保存性能指标
+    if let Err(e) = state.database.insert_metric(
+        "translation",
+        duration_ms as i64,
+        true,
+        None,
+        char_count as i64,
+        completion_tokens,
+        tokens_per_second,
+    ).await {
+        error!("Failed to save performance metric: {}", e);
+    }
+    
     Ok(())
 }
 
@@ -307,7 +435,7 @@ pub fn run() {
                 let _tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().cloned().expect("no icon"))
                     .menu(&menu)
-                    .menu_on_left_click(false)
+                    .show_menu_on_left_click(false)
                     .on_menu_event(|app, event| match event.id().as_ref() {
                         "toggle" => {
                             info!("Toggle translation monitoring");
