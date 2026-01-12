@@ -7,13 +7,19 @@
 
   let showApiKey = false;
   let isTesting = false;
+  let isSaving = false;
 
   const predefinedModels = [
     "hy-mt1.5-1.8b"
   ];
 
-  async function handleChange() {
-    await onUpdate(llmConfig);
+  async function handleSave() {
+    isSaving = true;
+    try {
+      await onUpdate(llmConfig);
+    } finally {
+      isSaving = false;
+    }
   }
 
   async function handleTestConnection() {
@@ -32,7 +38,6 @@
       type="text"
       id="base-url"
       bind:value={llmConfig.base_url}
-      oninput={handleChange}
       placeholder="https://api.openai.com/v1"
     />
   </div>
@@ -45,7 +50,6 @@
           type="text"
           id="api-key"
           bind:value={llmConfig.api_key}
-          oninput={handleChange}
           placeholder="sk-..."
         />
       {:else}
@@ -53,7 +57,6 @@
           type="password"
           id="api-key"
           bind:value={llmConfig.api_key}
-          oninput={handleChange}
           placeholder="sk-..."
         />
       {/if}
@@ -74,7 +77,6 @@
         type="text"
         id="model"
         bind:value={llmConfig.model}
-        oninput={handleChange}
         list="model-list"
         placeholder="gpt-4o-mini"
       />
@@ -93,7 +95,6 @@
         type="range"
         id="temperature"
         bind:value={llmConfig.temperature}
-        oninput={handleChange}
         min="0"
         max="2"
         step="0.1"
@@ -106,7 +107,6 @@
         type="range"
         id="top-p"
         bind:value={llmConfig.top_p}
-        oninput={handleChange}
         min="0"
         max="1"
         step="0.01"
@@ -119,7 +119,6 @@
     <textarea
       id="system-prompt"
       bind:value={llmConfig.system_prompt}
-      oninput={handleChange}
       rows="3"
       placeholder="You are a professional translator..."
     ></textarea>
@@ -131,7 +130,6 @@
     <textarea
       id="user-prompt"
       bind:value={llmConfig.user_prompt_template}
-      oninput={handleChange}
       rows="3"
       placeholder="将下列文本翻译为&#123;target_language&#125;，保持原有格式：&#123;text&#125;"
     ></textarea>
@@ -145,7 +143,6 @@
           type="radio"
           bind:group={llmConfig.stream_mode}
           value={true}
-          onchange={handleChange}
         />
         <span class="toggle-label">
           <span class="toggle-title">Stream（流式）</span>
@@ -157,7 +154,6 @@
           type="radio"
           bind:group={llmConfig.stream_mode}
           value={false}
-          onchange={handleChange}
         />
         <span class="toggle-label">
           <span class="toggle-title">Invoke（一次性）</span>
@@ -171,7 +167,9 @@
     <button class="btn secondary" onclick={handleTestConnection} disabled={isTesting}>
       {isTesting ? "测试中..." : "测试连接"}
     </button>
-    <p class="auto-save-hint">✨ 设置已自动保存</p>
+    <button class="btn primary" onclick={handleSave} disabled={isSaving}>
+      {isSaving ? "保存中..." : "保存配置"}
+    </button>
   </div>
 </div>
 
@@ -278,6 +276,17 @@
     background: rgba(37, 99, 235, 0.05);
   }
 
+  .btn.primary {
+    background: #2563eb;
+    color: #ffffff;
+    border: 1px solid #2563eb;
+  }
+
+  .btn.primary:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+  }
+
   .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -343,19 +352,5 @@
     margin-top: 32px;
     padding-top: 16px;
     border-top: 1px solid #f1f5f9;
-  }
-
-  .auto-save-hint {
-    color: #64748b;
-    font-size: 0.75rem;
-    font-weight: 500;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: #f8fafc;
-    padding: 6px 14px;
-    border-radius: 20px;
-    border: 1px solid #e2e8f0;
   }
 </style>
