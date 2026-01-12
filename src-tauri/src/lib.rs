@@ -1,4 +1,4 @@
-//! AITyping - AI 驱动的翻译助手
+//! QuickTransType - AI 驱动的翻译助手
 //!
 //! 一个基于 Tauri 的 macOS 翻译应用，支持全局热键触发翻译
 
@@ -457,7 +457,7 @@ fn init_logging() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "aityping=debug,tauri=info".into()),
+                .unwrap_or_else(|_| "QuickTransType=debug,tauri=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -467,7 +467,7 @@ fn init_logging() {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     init_logging();
-    info!("Starting AITyping...");
+    info!("Starting QuickTransType...");
 
     // 检查辅助功能权限
     if !check_accessibility_permission() {

@@ -83,7 +83,7 @@
   <header>
     <div class="header-content">
       <div class="header-left">
-        <h1>AITyping</h1>
+        <h1>QuickTransType</h1>
         <p class="subtitle">智能翻译助手</p>
       </div>
       <div class="header-right">

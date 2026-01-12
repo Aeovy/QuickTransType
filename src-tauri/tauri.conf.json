@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "AITyping",
+  "productName": "QuickTransType",
   "version": "0.1.0",
-  "identifier": "com.aityping.app",
+  "identifier": "com.QuickTransType.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AITyping - 智能翻译助手",
+        "title": "QuickTransType - 智能翻译助手",
         "width": 900,
         "height": 700,
         "minWidth": 600,
@@ -38,7 +38,7 @@
     ],
     "category": "Utility",
     "shortDescription": "AI-powered translation assistant",
-    "longDescription": "AITyping is an AI-powered translation assistant that allows you to translate text using LLM with customizable hotkeys.",
+    "longDescription": "QuickTransType is an AI-powered translation assistant that allows you to translate text using LLM with customizable hotkeys.",
     "macOS": {
       "entitlements": null,
       "signingIdentity": null,
