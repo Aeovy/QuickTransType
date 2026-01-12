@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { onDestroy, onMount } from "svelte";
   import History from "./lib/History.svelte";
@@ -11,7 +12,9 @@
   let config = $derived($appState.config);
   let favoriteLanguages = $derived(config?.language.favorite_languages ?? []);
   let currentTarget = $state("en-US");
+  let isEnabled = $state(true);
   let unlistenConfigUpdate: UnlistenFn | null = null;
+  let unlistenEnabledStatus: UnlistenFn | null = null;
 
   // 同步currentTarget与config的变化
   $effect(() => {
@@ -33,19 +36,45 @@
     }
   }
 
+  async function toggleEnabled() {
+    const newStatus = !isEnabled;
+    try {
+      await invoke("set_enabled_status", { enabled: newStatus });
+      isEnabled = newStatus;
+    } catch (error) {
+      console.error("Failed to toggle enabled status:", error);
+    }
+  }
+
   onMount(async () => {
     await appState.loadConfig();
+    
+    // 获取初始启用状态
+    try {
+      isEnabled = await invoke<boolean>("get_enabled_status");
+    } catch (error) {
+      console.error("Failed to get enabled status:", error);
+    }
     
     // 监听配置更新事件（从托盘菜单或其他地方触发）
     unlistenConfigUpdate = await listen("config-updated", async () => {
       console.log("Config updated, reloading...");
       await appState.loadConfig();
     });
+
+    // 监听启用状态变化事件
+    unlistenEnabledStatus = await listen<boolean>("enabled-status-changed", (event) => {
+      console.log("Enabled status changed:", event.payload);
+      isEnabled = event.payload;
+    });
   });
 
   onDestroy(() => {
     if (unlistenConfigUpdate) {
       unlistenConfigUpdate();
+    }
+    if (unlistenEnabledStatus) {
+      unlistenEnabledStatus();
     }
   });
 </script>
@@ -58,6 +87,14 @@
         <p class="subtitle">智能翻译助手</p>
       </div>
       <div class="header-right">
+        <button 
+          class="toggle-button" 
+          class:enabled={isEnabled}
+          onclick={toggleEnabled}
+          title={isEnabled ? "点击暂停" : "点击启用"}
+        >
+          {isEnabled ? "✓ 已启用" : "⏸ 已暂停"}
+        </button>
         <label class="target-lang-selector">
           <span class="selector-label">目标语言:</span>
           <select value={currentTarget} onchange={handleTargetLanguageChange}>
@@ -166,6 +203,35 @@
   .header-right {
     display: flex;
     align-items: center;
+    gap: 15px;
+  }
+
+  .toggle-button {
+    padding: 8px 16px;
+    border: 2px solid #d1d5db;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #6b7280;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+
+  .toggle-button:hover {
+    border-color: #9ca3af;
+  }
+
+  .toggle-button.enabled {
+    border-color: #10b981;
+    background: #ecfdf5;
+    color: #059669;
+  }
+
+  .toggle-button.enabled:hover {
+    background: #d1fae5;
+    border-color: #059669;
   }
 
   .target-lang-selector {

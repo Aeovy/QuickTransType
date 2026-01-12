@@ -19,6 +19,45 @@ pub async fn get_config(state: State<'_, Arc<AppState>>) -> Result<AppConfig, St
     Ok(state.get_config().await)
 }
 
+/// 获取当前启用状态
+#[tauri::command]
+pub async fn get_enabled_status(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
+    Ok(*state.is_enabled.read().await)
+}
+
+/// 设置启用状态
+#[tauri::command]
+pub async fn set_enabled_status(
+    enabled: bool,
+    state: State<'_, Arc<AppState>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    *state.is_enabled.write().await = enabled;
+    info!("Translation monitoring {}", if enabled { "enabled" } else { "disabled" });
+    
+    // 更新托盘菜单
+    #[cfg(desktop)]
+    {
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        
+        if let Ok(new_menu) = crate::build_tray_menu(&app, &state).await {
+            if let Some(tray) = app.tray_by_id("main") {
+                let _ = tray.set_menu(None::<tauri::menu::Menu<tauri::Wry>>);
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                if let Err(e) = tray.set_menu(Some(new_menu)) {
+                    error!("Failed to update tray menu: {}", e);
+                }
+            }
+        }
+    }
+    
+    // 发送事件通知前端
+    app.emit("enabled-status-changed", enabled)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    
+    Ok(())
+}
+
 /// 保存应用配置
 #[tauri::command]
 pub async fn save_config(

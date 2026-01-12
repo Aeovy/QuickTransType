@@ -136,7 +136,7 @@
   </div>
 
   <div class="form-group">
-    <label>输出模式</label>
+    <div class="form-label">输出模式</div>
     <div class="toggle-group">
       <label class="toggle-option">
         <input
@@ -185,6 +185,13 @@
   }
 
   .form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #4b5563;
+    font-size: 0.9rem;
+  }
+
+  .form-label {
     display: block;
     margin-bottom: 8px;
     color: #4b5563;

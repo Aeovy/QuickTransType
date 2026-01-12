@@ -31,8 +31,10 @@ pub(crate) async fn build_tray_menu(
 
     let config = state.config.read().await;
     let current_target = config.language.current_target.clone();
+    let is_enabled = *state.is_enabled.read().await;
     
     info!("构建托盘菜单，当前目标语言: {}", current_target);
+    info!("当前启用状态: {}", is_enabled);
     
     // 构建语言子菜单 - 使用普通MenuItem而非CheckMenuItem避免状态残留
     let mut lang_submenu = SubmenuBuilder::new(app, "切换目标语言");
@@ -52,9 +54,14 @@ pub(crate) async fn build_tray_menu(
     }
     let lang_menu = lang_submenu.build().map_err(|e| e.to_string())?;
 
-    let toggle = MenuItemBuilder::with_id("toggle", "启用/暂停")
+    let toggle_label = if is_enabled {
+        "✓ 已启用"
+    } else {
+        "  已暂停"
+    };
+    let toggle = MenuItemBuilder::with_id("toggle", toggle_label)
         .build(app)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;;
     let settings = MenuItemBuilder::with_id("settings", "打开设置")
         .build(app)
         .map_err(|e| e.to_string())?;
@@ -300,6 +307,14 @@ async fn trigger_translation(app: &tauri::AppHandle, mode: &str) -> Result<(), B
     info!("Triggering {} translation", mode);
     
     let state = app.state::<Arc<AppState>>();
+    
+    // 检查是否启用
+    let is_enabled = *state.is_enabled.read().await;
+    if !is_enabled {
+        debug!("Translation is disabled, skipping");
+        return Ok(());
+    }
+    
     let config = state.get_config().await;
     
     // 获取文本
@@ -554,7 +569,33 @@ pub fn run() {
                         match event_id {
                             "toggle" => {
                                 info!("Toggle translation monitoring");
-                                // TODO: 实现启用/暂停逻辑
+                                let state = app_state.clone();
+                                let app_clone = app_handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    let mut is_enabled = state.is_enabled.write().await;
+                                    *is_enabled = !*is_enabled;
+                                    let new_status = *is_enabled;
+                                    drop(is_enabled);
+                                    
+                                    info!("Translation monitoring toggled to: {}", new_status);
+                                    
+                                    // 更新托盘菜单
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                                    if let Ok(new_menu) = build_tray_menu(&app_clone, &state).await {
+                                        if let Some(tray) = app_clone.tray_by_id("main") {
+                                            let _ = tray.set_menu(None::<tauri::menu::Menu<tauri::Wry>>);
+                                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                            if let Err(e) = tray.set_menu(Some(new_menu)) {
+                                                error!("Failed to update tray menu: {}", e);
+                                            }
+                                        }
+                                    }
+                                    
+                                    // 发送事件通知前端
+                                    if let Err(e) = app_clone.emit("enabled-status-changed", new_status) {
+                                        error!("Failed to emit enabled-status-changed event: {}", e);
+                                    }
+                                });
                             }
                             "settings" => {
                                 info!("Opening settings window");
@@ -578,6 +619,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::save_config,
+            commands::get_enabled_status,
+            commands::set_enabled_status,
             commands::test_llm_connection,
             commands::get_history,
             commands::clear_history,
