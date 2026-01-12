@@ -26,30 +26,41 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub(crate) async fn build_tray_menu(
     app: &tauri::AppHandle,
     state: &Arc<AppState>,
-) -> Result<tauri::menu::Menu<tauri::Wry>, Box<dyn std::error::Error>> {
+) -> Result<tauri::menu::Menu<tauri::Wry>, String> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
     let config = state.config.read().await;
     let current_target = config.language.current_target.clone();
     
-    // 构建语言子菜单
+    info!("构建托盘菜单，当前目标语言: {}", current_target);
+    
+    // 构建语言子菜单 - 使用普通MenuItem而非CheckMenuItem避免状态残留
     let mut lang_submenu = SubmenuBuilder::new(app, "切换目标语言");
     for lang in &config.language.favorite_languages {
         let is_current = lang.code == current_target;
+        // 使用系统标准的勾选标记
         let label = if is_current {
             format!("✓ {}", lang.name)
         } else {
-            lang.name.clone()
+            format!("  {}", lang.name)  // 添加空格保持对齐
         };
+        info!("  语言项: {} ({}), 是否当前: {}", lang.name, lang.code, is_current);
         let item = MenuItemBuilder::with_id(&format!("lang_{}", lang.code), label)
-            .build(app)?;
+            .build(app)
+            .map_err(|e| e.to_string())?;
         lang_submenu = lang_submenu.item(&item);
     }
-    let lang_menu = lang_submenu.build()?;
+    let lang_menu = lang_submenu.build().map_err(|e| e.to_string())?;
 
-    let toggle = MenuItemBuilder::with_id("toggle", "启用/暂停").build(app)?;
-    let settings = MenuItemBuilder::with_id("settings", "打开设置").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+    let toggle = MenuItemBuilder::with_id("toggle", "启用/暂停")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let settings = MenuItemBuilder::with_id("settings", "打开设置")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let quit = MenuItemBuilder::with_id("quit", "退出")
+        .build(app)
+        .map_err(|e| e.to_string())?;
 
     let menu = MenuBuilder::new(app)
         .item(&lang_menu)
@@ -59,7 +70,8 @@ pub(crate) async fn build_tray_menu(
         .item(&settings)
         .separator()
         .item(&quit)
-        .build()?;
+        .build()
+        .map_err(|e| e.to_string())?;
 
     Ok(menu)
 }
@@ -501,15 +513,28 @@ pub fn run() {
                             let app_handle_clone = app_handle.clone();
                             tauri::async_runtime::spawn(async move {
                                 let mut config = state.get_config().await;
+                                info!("托盘点击前，当前目标语言: {}", config.language.current_target);
                                 config.language.current_target = lang.clone();
+                                info!("准备保存新的目标语言: {}", lang);
                                 if let Err(e) = state.save_config(&config).await {
                                     error!("Failed to save language config: {}", e);
                                     return;
                                 }
+                                info!("配置已保存");
+                                
+                                // 等待一小段时间确保配置完全保存
+                                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
                                 
                                 // 重新构建托盘菜单
                                 if let Ok(new_menu) = build_tray_menu(&app_handle_clone, &state).await {
                                     if let Some(tray) = app_handle_clone.tray_by_id("main") {
+                                        // 先移除旧菜单
+                                        if let Err(e) = tray.set_menu(None::<tauri::menu::Menu<tauri::Wry>>) {
+                                            error!("Failed to remove old tray menu: {}", e);
+                                        }
+                                        // 等待 macOS 刷新
+                                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                        // 设置新菜单
                                         if let Err(e) = tray.set_menu(Some(new_menu)) {
                                             error!("Failed to update tray menu: {}", e);
                                         } else {

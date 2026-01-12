@@ -45,8 +45,16 @@ pub async fn save_config(
     // 更新托盘菜单
     #[cfg(desktop)]
     {
+        // 等待配置完全写入
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        
         if let Ok(new_menu) = crate::build_tray_menu(&app, &state).await {
             if let Some(tray) = app.tray_by_id("main") {
+                // 先移除旧菜单
+                let _ = tray.set_menu(None::<tauri::menu::Menu<tauri::Wry>>);
+                // 等待 macOS 刷新
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                // 设置新菜单
                 if let Err(e) = tray.set_menu(Some(new_menu)) {
                     error!("Failed to update tray menu: {}", e);
                 } else {
