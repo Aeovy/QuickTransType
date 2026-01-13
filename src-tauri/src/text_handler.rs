@@ -3,7 +3,7 @@
 //!
 //! 支持平台:
 //! - macOS: 使用 AppleScript (osascript) 模拟键盘操作
-//! - Windows: 使用 enigo 库模拟键盘操作
+//! - TODO:Windows: 使用 enigo 库模拟键盘操作
 
 use crate::error::{AppError, Result};
 use arboard::Clipboard;
@@ -46,7 +46,7 @@ impl TextHandler {
     pub async fn translate_selected(&self) -> Result<String> {
         info!("Getting selected text");
 
-        // 获取剪贴板互斥锁，确保操作原子性
+        // 获取剪贴板互斥锁
         let _lock = self.clipboard_mutex.lock().await;
 
         // 备份当前剪贴板
@@ -72,17 +72,14 @@ impl TextHandler {
             if let Some(ref bak) = backup_clone {
                 self.set_clipboard_internal(bak).await.ok();
             }
-            return Err(AppError::Clipboard("没有选中文本或复制失败".to_string()));
+            return Err(AppError::Clipboard("复制失败".to_string()));
         }
-
-        // 如果剪贴板内容与备份相同，可能复制失败（用户没有选中任何文本）
-        if let Some(ref bak) = backup_clone {
-            if &text == bak && !bak.is_empty() {
-                debug!("Clipboard unchanged after copy, user may not have selected text");
-                // 恢复备份
+        else if text.trim().is_empty(){
+            // 恢复备份
+            if let Some(ref bak) = backup_clone {
                 self.set_clipboard_internal(bak).await.ok();
-                return Err(AppError::Clipboard("没有检测到选中的文本".to_string()));
             }
+            return Err(AppError::Clipboard("没有选中有效文本".to_string()));
         }
 
         debug!("Got selected text: {} chars", text.len());
@@ -115,7 +112,7 @@ impl TextHandler {
         // 模拟 Cmd+C 复制
         self.copy().await?;
 
-        // 等待剪贴板更新，使用重试机制
+        // 等待剪贴板更新
         let text = self
             .wait_for_clipboard_change("", CLIPBOARD_MAX_RETRIES)
             .await?;
@@ -185,7 +182,7 @@ impl TextHandler {
             self.set_clipboard_internal(&chunk_str).await?;
             sleep(Duration::from_millis(10)).await;
             self.paste_clipboard().await?;
-            sleep(Duration::from_millis(20)).await;
+            sleep(Duration::from_millis(10)).await;
         }
 
         Ok(())
@@ -219,7 +216,7 @@ impl TextHandler {
         Ok(())
     }
 
-    /// 获取剪贴板内容（内部使用，带重试机制）
+    /// 获取剪贴板内容
     async fn get_clipboard_internal(&self) -> Result<String> {
         for attempt in 0..CLIPBOARD_MAX_RETRIES {
             match self.try_get_clipboard() {
@@ -267,7 +264,7 @@ impl TextHandler {
         unreachable!()
     }
 
-    /// 尝试设置剪贴板内容（单次尝试）
+    /// 尝试设置剪贴板内容
     fn try_set_clipboard(&self, text: &str) -> Result<()> {
         let mut clipboard =
             Clipboard::new().map_err(|e| AppError::Clipboard(format!("无法访问剪贴板: {}", e)))?;

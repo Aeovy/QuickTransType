@@ -499,7 +499,7 @@ fn init_logging() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "QuickTransType=debug,tauri=info".into()),
+                .unwrap_or_else(|_| "quick_trans_type=debug,tauri=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();

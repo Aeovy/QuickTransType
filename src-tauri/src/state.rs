@@ -38,7 +38,7 @@ impl AppState {
         // 获取配置路径
         let config_dir = dirs::config_dir()
             .ok_or_else(|| crate::error::AppError::Config("无法获取配置目录".to_string()))?;
-        let config_path = config_dir.join("AITyping").join("config.json");
+        let config_path = config_dir.join("QuickTransType").join("config.json");
 
         // 加载或创建配置
         let config = Self::load_config(&config_path).await;

@@ -61,7 +61,7 @@ impl Database {
     fn get_db_path() -> Result<PathBuf> {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| AppError::Config("无法获取数据目录".to_string()))?;
-        Ok(data_dir.join("AITyping").join("aityping.db"))
+        Ok(data_dir.join("QuickTransType").join("quicktranstype.db"))
     }
 
     /// 运行数据库迁移
