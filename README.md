@@ -49,3 +49,6 @@ rm -rf ~/Library/Application\ Support/QuickTransType
 - [ ] improve: 提供多语言界面
 - [ ] debug: 提高热键触发稳定性
 - [ ] debug: 修复使用可输入文本作为热键时的崩溃问题
+
+## License
+This Project is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License. See the [LICENSE](./LICENSE) file for details.
